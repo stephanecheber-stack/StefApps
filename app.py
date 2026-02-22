@@ -12,7 +12,7 @@ from engine import normalize_status
 load_dotenv()
 
 # Configuration
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 WORKFLOWS_FILE = "workflows.yaml"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "IMPOSSIBLE_PASSWORD_SEQUENCE_XYZ")
 
