@@ -1,0 +1,10 @@
+sqlalchemy
+fastapi
+uvicorn
+streamlit
+pydantic
+requests
+python-multipart
+pyyaml
+python-dotenv
+pandas

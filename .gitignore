@@ -1,0 +1,13 @@
+# Secrets / Env Vars
+.env
+
+# Database
+*.db
+
+# Python environments
+venv/
+__pycache__/
+*.pyc
+
+# IDE / Editor
+.antigravity/

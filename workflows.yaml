@@ -1,0 +1,49 @@
+- name: CRITIQUE
+  steps:
+  - action: update
+    fields:
+      assigned_to: GRP_ITSM
+      status: À faire
+  - action: create_task
+    fields:
+      description: Vérifier le serveur ITSM1 et tous ces composants
+      priority: Haute
+      status: À faire
+      title: Vérifier le serveur ITSM1
+  - action: create_task
+    fields:
+      description: Changer le mot de passe serveur ITSM1 et vérifier les accès
+      priority: Moyenne
+      status: Nouveau
+      title: Changer le mot de passe serveur ITSM1
+  triggers:
+  - field: Priorité
+    operator: Est égal à
+    value: Critique
+  - field: Titre
+    operator: Contient
+    value: ITSM
+- name: SERVER URGENT
+  steps:
+  - action: update
+    fields:
+      assigned_to: GRP_SERVER_SUPPORT_N2
+  - action: create_task
+    fields:
+      assigned_to: GRP_SERVER_SUPPORT_N2
+      description: Redémarrer le server
+      status: Nouveau
+      title: Redémarrer le server
+  triggers:
+  - field: Statut
+    operator: Est parmi
+    value:
+    - Nouveau
+    - En cours
+  - field: Titre
+    operator: Contient
+    value: SERVER
+  - field: Priorité
+    operator: Est parmi
+    value:
+    - Haute
