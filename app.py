@@ -126,11 +126,132 @@ def cb_delete_group(group_id, group_name):
 # INTERFACE
 # -----------------------------------------------------------------------------
 
-st.set_page_config(page_title="LiteFlow Manager", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="LiteFlow Manager", layout="wide", page_icon="⚡", initial_sidebar_state="expanded")
+
+def inject_custom_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+        /* Hide Streamlit Header, Footer, and MainMenu with high specificity */
+        #MainMenu {visibility: hidden !important;}
+        footer {visibility: hidden !important;}
+        header {visibility: hidden !important;}
+        
+        /* Remove Streamlit default padding and max-width constraints */
+        .block-container {
+            padding-top: 2rem !important;
+            padding-bottom: 0rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            max-width: 100% !important; /* Allow the layout to span wide */
+        }
+
+        /* Ensure the body takes full height and uses Inter font */
+        html, body, [class*="css"], [class*="st-"] {
+            font-family: 'Inter', sans-serif !important;
+        }
+
+        /* Adjust for fixed headers if necessary in Streamlit context */
+        .stApp {
+            margin-top: -56px !important;
+            background-color: #f6f6f8; /* background-light */
+        }
+
+        /* --- STITCH METRICS PILLS --- */
+        .status-pill-resolved { background-color: #f0fdf4; color: #166534; }
+        .status-pill-pending { background-color: #fffbeb; color: #92400e; }
+        .status-pill-total { background-color: #eef2ff; color: #3730a3; }
+        
+        .card-shadow {
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            transition: all 0.2s ease-in-out;
+        }
+        .card-shadow:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+            transform: translateY(-2px);
+        }
+
+        /* Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #ffffff;
+            border-right: 1px solid #e2e8f0;
+        }
+        
+        /* Containers */
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 16px; /* 2xl matches stitch */
+            background-color: #ffffff;
+            border: 1px solid #f1f5f9 !important;
+        }
+
+        /* Buttons */
+        [data-testid="baseButton-primary"] {
+            background-color: #5048e5;
+            border: none;
+            border-radius: 0.75rem; /* rounded-xl */
+            font-weight: 600;
+            color: #ffffff !important;
+            box-shadow: 0 4px 6px -1px rgba(80, 72, 229, 0.2), 0 2px 4px -2px rgba(80, 72, 229, 0.2);
+        }
+        [data-testid="baseButton-primary"]:hover {
+            opacity: 0.9;
+        }
+
+        [data-testid="baseButton-secondary"] {
+            border-radius: 0.75rem; /* rounded-xl */
+            border: 1px solid #e2e8f0;
+            background-color: #ffffff;
+            color: #475569;
+            font-weight: 600;
+        }
+        [data-testid="baseButton-secondary"]:hover {
+            background-color: #f8fafc;
+        }
+
+        /* Inputs */
+        div[data-baseweb="input"] input, div[data-baseweb="select"] {
+            border-radius: 0.75rem !important; /* rounded-xl */
+            background-color: #f1f5f9;
+            border: none;
+        }
+        div[data-baseweb="input"]:focus-within, div[data-baseweb="select"]:focus-within {
+             outline: 2px solid rgba(80, 72, 229, 0.2); 
+        }
+
+        /* Titles and Tabs */
+        h1, h2, h3 {
+            font-weight: 700 !important;
+            letter-spacing: -0.025em; /* tracking-tight */
+            color: #0f172a; /* text-slate-900 */
+        }
+        [data-testid="stTabs"] button {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #64748b;
+        }
+        [data-testid="stTabs"] button[aria-selected="true"] {
+            color: #5048e5;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+inject_custom_css()
 init_state()
 
 # SIDEBAR
-st.sidebar.title("⚡ LiteFlow")
+st.sidebar.markdown(
+    """
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+        <div style="background-color: #5048e5; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+            <span class="material-symbols-outlined" style="color: white; font-size: 20px;">bolt</span>
+        </div>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; color: #0f172a;">LiteFlow <span style="color: #5048e5; font-weight: 500;">Pro</span></h1>
+    </div>
+    """, unsafe_allow_html=True
+)
+
 if not st.session_state.authenticated:
     pwd = st.sidebar.text_input("Code Admin", type="password")
     if st.sidebar.button("Déverrouiller", width='stretch'):
@@ -138,20 +259,27 @@ if not st.session_state.authenticated:
             st.session_state.authenticated = True
             st.rerun()
 else:
-    st.sidebar.success("✅ Admin")
-    if st.sidebar.button("Quitter", width='stretch'):
+    st.sidebar.success("✅ Administration déverrouillée")
+    if st.sidebar.button("Se déconnecter", width='stretch'):
         st.session_state.authenticated = False
         st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("📝 Nouveau Ticket")
+st.sidebar.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;'>Création Express</p>", unsafe_allow_html=True)
 with st.sidebar.container(border=True):
-    st.text_input("Titre", key="create_title")
-    st.selectbox("Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority", index=1)
-    st.selectbox("Assigné à", st.session_state["support_groups"], key="create_assigned")
-    st.button("Ouvrir le ticket", on_click=cb_create_task, width='stretch', type="primary")
+    st.text_input("Titre du ticket", key="create_title", placeholder="Brève description...")
+    st.selectbox("Niveau de Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority", index=1)
+    st.selectbox("Assignation Automatique", st.session_state["support_groups"], key="create_assigned")
+    st.button("➕ Créer le ticket", on_click=cb_create_task, width='stretch', type="primary")
 
-st.title("⚡ Dashboard Opérationnel")
+st.markdown(
+    """
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h1 style='color: #0f172a; margin: 0;'>Dashboard Opérationnel</h1>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 
 tabs = st.tabs(["📋 Liste des tâches", "⚡ Flow Designer", "📊 Base de données", "🛠️ Admin Tools"])
 
@@ -159,16 +287,69 @@ tabs = st.tabs(["📋 Liste des tâches", "⚡ Flow Designer", "📊 Base de don
 with tabs[0]:
     c1, c2 = st.columns([1, 4])
     with c1: st.button("🔄 Actualiser", width='stretch')
-    with c2: search = st.text_input("Recherche rapide", placeholder="Mot-clé...", label_visibility="collapsed")
+    with c2: search = st.text_input("Recherche rapide", placeholder="Rechercher par mot-clé, ID, ou assigné...", label_visibility="collapsed")
 
     try:
         resp = requests.get(f"{API_URL}/tasks/?limit=1000")
         if resp.status_code == 200:
             all_data = resp.json()
             if all_data:
+                # Calcul des statistiques pour les Metrics (Stitch Layout)
+                total_tickets = len(all_data)
+                resolved = len([t for t in all_data if normalize_status(t['status']) == "Terminé"])
+                pending = total_tickets - resolved
+                
+                # HTML Metrics Dashboard using Stitch Design
+                st.markdown(f"""
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <!-- Total Metrics -->
+                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Total Tickets</p>
+                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{total_tickets}</h3>
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #059669; font-size: 14px; font-weight: 600;">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">trending_up</span>
+                                <span>Volume Global</span>
+                            </div>
+                        </div>
+                        <div class="status-pill-total" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <span class="material-symbols-outlined">confirmation_number</span>
+                        </div>
+                    </div>
+                    <!-- Resolved -->
+                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Résolus</p>
+                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{resolved}</h3>
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #059669; font-size: 14px; font-weight: 600;">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span>
+                                <span>Terminés</span>
+                            </div>
+                        </div>
+                        <div class="status-pill-resolved" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <span class="material-symbols-outlined">verified</span>
+                        </div>
+                    </div>
+                    <!-- Pending -->
+                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">En Attente</p>
+                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{pending}</h3>
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #d97706; font-size: 14px; font-weight: 600;">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                                <span>En Cours</span>
+                            </div>
+                        </div>
+                        <div class="status-pill-pending" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <span class="material-symbols-outlined">hourglass_empty</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
                 df = pd.DataFrame(all_data)
                 status_map = {"Nouveau": "🔵 Nouveau", "À faire": "🟡 À faire", "En cours": "🟢 En cours", "Terminé": "⚪ Terminé"}
-                priority_map = {"Critique": "🔥 Critique", "Haute": "🔴 Haute", "Moyenne": "🟡 Moyenne", "Basse": "🔵 Basse"}
+                priority_map = {"Critique": "🚨 Critique", "Haute": "🔴 Haute", "Moyenne": "🟠 Moyenne", "Basse": "🟢 Basse"}
                 
                 df['status_view'] = df['status'].apply(lambda x: status_map.get(normalize_status(x), x))
                 df['priority_view'] = df['priority'].apply(lambda x: priority_map.get(x, x))
@@ -200,7 +381,12 @@ with tabs[0]:
                     t = all_data[selected_idx]
                     tid = t['id']
 
-                    st.markdown(f"### 📑 Gestion du Ticket #{tid}")
+                    st.markdown(f"""
+                        <div style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;">
+                            <span style="background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-weight: 700; color: #475569; font-size: 14px;">#{tid}</span>
+                            <h3 style="margin: 0; padding: 0;">Gestion du Ticket</h3>
+                        </div>
+                    """, unsafe_allow_html=True)
                     
                     with st.container(border=True):
                         col_a, col_b = st.columns(2)

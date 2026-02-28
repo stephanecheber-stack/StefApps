@@ -1,0 +1,381 @@
+{
+    "app_name": "LiteFlow Pro",
+    "theme": "Streamlit Default (Targeting Modern SaaS Dark/Light Mode)",
+    "global_css_classes_injected": [],
+    "hierarchy": {
+        "sidebar": {
+            "type": "sidebar",
+            "elements": [
+                {
+                    "type": "title",
+                    "text": "⚡ LiteFlow"
+                },
+                {
+                    "type": "auth_form",
+                    "elements": [
+                        "text_input(password)",
+                        "button(Déverrouiller)"
+                    ]
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "subheader",
+                    "text": "📝 Nouveau Ticket"
+                },
+                {
+                    "type": "container",
+                    "border": true,
+                    "elements": [
+                        {
+                            "type": "text_input",
+                            "label": "Titre"
+                        },
+                        {
+                            "type": "selectbox",
+                            "label": "Priorité"
+                        },
+                        {
+                            "type": "selectbox",
+                            "label": "Assigné à"
+                        },
+                        {
+                            "type": "button",
+                            "label": "Ouvrir le ticket",
+                            "style": "primary"
+                        }
+                    ]
+                }
+            ]
+        },
+        "main_content": {
+            "type": "main",
+            "elements": [
+                {
+                    "type": "title",
+                    "text": "⚡ Dashboard Opérationnel"
+                },
+                {
+                    "type": "tabs",
+                    "labels": [
+                        "📋 Liste des tâches",
+                        "⚡ Flow Designer",
+                        "📊 Base de données",
+                        "🛠️ Admin Tools"
+                    ],
+                    "content": {
+                        "tab_dashboard": {
+                            "type": "tab",
+                            "elements": [
+                                {
+                                    "type": "columns",
+                                    "ratio": [
+                                        1,
+                                        4
+                                    ],
+                                    "elements": [
+                                        {
+                                            "type": "button",
+                                            "label": "🔄 Actualiser"
+                                        },
+                                        {
+                                            "type": "text_input",
+                                            "label": "Recherche rapide"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "dataframe",
+                                    "columns": [
+                                        "id",
+                                        "title",
+                                        "status_view",
+                                        "priority_view",
+                                        "assigned_to",
+                                        "parent_id"
+                                    ]
+                                },
+                                {
+                                    "type": "conditional_editor_form",
+                                    "condition": "row_selected",
+                                    "elements": [
+                                        {
+                                            "type": "markdown",
+                                            "text": "### 📑 Gestion du Ticket #{tid}"
+                                        },
+                                        {
+                                            "type": "container",
+                                            "border": true,
+                                            "elements": [
+                                                {
+                                                    "type": "columns",
+                                                    "ratio": [
+                                                        1,
+                                                        1
+                                                    ],
+                                                    "elements": [
+                                                        [
+                                                            {
+                                                                "type": "text_input",
+                                                                "label": "Titre du ticket"
+                                                            },
+                                                            {
+                                                                "type": "selectbox",
+                                                                "label": "Statut (Cycle de vie)"
+                                                            },
+                                                            {
+                                                                "type": "selectbox",
+                                                                "label": "Niveau d'urgence"
+                                                            }
+                                                        ],
+                                                        [
+                                                            {
+                                                                "type": "selectbox",
+                                                                "label": "Groupe assigné"
+                                                            },
+                                                            {
+                                                                "type": "text_input",
+                                                                "label": "Tags / Étiquettes"
+                                                            },
+                                                            {
+                                                                "type": "text_area",
+                                                                "label": "Description / Historique"
+                                                            }
+                                                        ]
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "type": "columns",
+                                            "ratio": [
+                                                1,
+                                                1,
+                                                2
+                                            ],
+                                            "elements": [
+                                                {
+                                                    "type": "button",
+                                                    "label": "💾 Enregistrer les modifications",
+                                                    "style": "primary"
+                                                },
+                                                {
+                                                    "type": "button",
+                                                    "label": "🗑️ Supprimer l'enregistrement",
+                                                    "style": "secondary"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "tab_flow_designer": {
+                            "type": "tab",
+                            "elements": [
+                                {
+                                    "type": "header",
+                                    "text": "⚡ Flow Designer"
+                                },
+                                {
+                                    "type": "expander",
+                                    "label": "📚 Règles existantes",
+                                    "elements": [
+                                        {
+                                            "type": "columns",
+                                            "ratio": [
+                                                4,
+                                                0.5,
+                                                0.5
+                                            ],
+                                            "elements": [
+                                                {
+                                                    "type": "markdown",
+                                                    "text": "Rule Title + Triggers summary"
+                                                },
+                                                {
+                                                    "type": "button",
+                                                    "label": "✏️"
+                                                },
+                                                {
+                                                    "type": "button",
+                                                    "label": "🗑️"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "subheader",
+                                    "text": "🛠 Nouvelle Règle / Modification Règle"
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "🔄 Nouvel éditeur"
+                                },
+                                {
+                                    "type": "text_input",
+                                    "label": "Nom de la règle"
+                                },
+                                {
+                                    "type": "markdown",
+                                    "text": "#### 1. Déclencheurs (ET logique)"
+                                },
+                                {
+                                    "type": "dynamic_rows",
+                                    "elements": [
+                                        {
+                                            "type": "columns",
+                                            "ratio": [
+                                                1.5,
+                                                1.5,
+                                                2
+                                            ],
+                                            "elements": [
+                                                {
+                                                    "type": "selectbox",
+                                                    "label": "Champ"
+                                                },
+                                                {
+                                                    "type": "selectbox",
+                                                    "label": "Opérateur"
+                                                },
+                                                {
+                                                    "type": "multiselect_or_text_input",
+                                                    "label": "Valeur"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "➕ Ajouter condition"
+                                },
+                                {
+                                    "type": "markdown",
+                                    "text": "#### 2. Actions : Ajouter/Modifier"
+                                },
+                                {
+                                    "type": "container",
+                                    "border": true,
+                                    "elements": [
+                                        {
+                                            "type": "selectbox",
+                                            "label": "Type d'action"
+                                        },
+                                        {
+                                            "type": "dynamic_rows",
+                                            "elements": [
+                                                {
+                                                    "type": "columns",
+                                                    "ratio": [
+                                                        2,
+                                                        2,
+                                                        0.5
+                                                    ],
+                                                    "elements": [
+                                                        {
+                                                            "type": "selectbox",
+                                                            "label": "Attribut"
+                                                        },
+                                                        {
+                                                            "type": "selectbox_or_text_input",
+                                                            "label": "Valeur"
+                                                        },
+                                                        {
+                                                            "type": "button",
+                                                            "label": "🗑️"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "type": "button",
+                                            "label": "➕ Ajouter un champ"
+                                        },
+                                        {
+                                            "type": "button",
+                                            "label": "✅ Valider l'étape",
+                                            "style": "primary"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "markdown",
+                                    "text": "--- (Liste des étapes validées)"
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "💾 ENREGISTRER LA REGLE",
+                                    "style": "primary"
+                                }
+                            ]
+                        },
+                        "tab_database": {
+                            "type": "tab",
+                            "elements": [
+                                {
+                                    "type": "header",
+                                    "text": "📊 Master Data : Groupes"
+                                },
+                                {
+                                    "type": "container",
+                                    "border": true,
+                                    "elements": [
+                                        {
+                                            "type": "columns",
+                                            "ratio": [
+                                                3,
+                                                1
+                                            ],
+                                            "elements": [
+                                                {
+                                                    "type": "text_input",
+                                                    "label": "Nom du nouveau groupe"
+                                                },
+                                                {
+                                                    "type": "button",
+                                                    "label": "Ajouter",
+                                                    "style": "primary"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "dataframe",
+                                    "description": "Group data"
+                                },
+                                {
+                                    "type": "selectbox",
+                                    "label": "Sélectionner un groupe à retirer"
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "🗑️ Supprimer le groupe",
+                                    "style": "primary"
+                                }
+                            ]
+                        },
+                        "tab_admin": {
+                            "type": "tab",
+                            "elements": [
+                                {
+                                    "type": "info",
+                                    "text": "Espace de maintenance système."
+                                },
+                                {
+                                    "type": "checkbox",
+                                    "label": "Désactiver le workflow lors des updates"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

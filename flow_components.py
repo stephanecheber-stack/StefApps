@@ -275,7 +275,16 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
         with open(workflows_file, "r", encoding="utf-8") as f:
             current_rules = yaml.safe_load(f) or []
 
-    st.header("⚡ Flow Designer")
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 24px;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 10px; border-radius: 10px; display: flex;">
+                <span style="font-size: 24px; color: white;">⚙️</span>
+            </div>
+            <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #0f172a;">Studio de Configuration des Règles</h1>
+        </div>
+        """, unsafe_allow_html=True
+    )
     
     # --- LISTE DES RÈGLES ---
     with st.expander(f"📚 Règles existantes ({len(current_rules)})", expanded=True):
@@ -297,17 +306,17 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
                     f = t.get('field', '?')
                     o = t.get('operator', '?')
                     v = t.get('value', '')
-                    desc_parts.append(f"{f} {o} '{v}'")
+                    desc_parts.append(f"<span style='background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:600;'>{f}</span> <i style='color:#64748b; font-size:12px;'>{o}</i> <strong style='color:#5048e5;'>'{v}'</strong>")
             
-            trigger_summary = " **ET** ".join(desc_parts) if desc_parts else "Aucun déclencheur"
+            trigger_summary = " <span style='color:#ef4444; font-weight:800; font-size:11px;'>ET</span> ".join(desc_parts) if desc_parts else "Aucun déclencheur"
 
             # 2. Affichage en colonnes
             c1, c2, c3 = st.columns([4, 0.5, 0.5])
             
             # Utilisation de Markdown pour un affichage sur deux lignes (Titre gras + Résumé gris)
             with c1:
-                st.markdown(f"**{i+1}. {rule.get('name')}**")
-                st.caption(f"⚡ Si : {trigger_summary}")
+                st.markdown(f"<p style='margin:0; font-size:16px; font-weight:700; color:#0f172a;'>{i+1}. {rule.get('name')}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='margin:4px 0 0 0; font-size:13px;'>⚡ Si : {trigger_summary}</p>", unsafe_allow_html=True)
 
             # Boutons d'action
             c2.button("✏️", key=f"edit_{i}", on_click=cb_load_rule, args=(i, current_rules), help="Modifier la règle")
@@ -324,16 +333,16 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
             st.divider()
 
     # --- ÉDITEUR ---
-    mode = "Nouvelle Règle" if st.session_state.editing_rule_idx == -1 else "Modification Règle"
-    st.subheader(f"🛠 {mode}")
+    mode = "✨ Nouvelle Règle Automatique" if st.session_state.editing_rule_idx == -1 else "📝 Modification Règle"
+    st.markdown(f"<h3 style='margin-top: 2rem; color: #0f172a;'>{mode}</h3>", unsafe_allow_html=True)
     
     c_reset, _ = st.columns([1, 4])
     c_reset.button("🔄 Nouvel éditeur", on_click=cb_start_new_rule)
 
-    st.text_input("Nom de la règle", key="current_rule_name")
+    st.text_input("Dénomination de la règle", key="current_rule_name", placeholder="ex: Escalade Auto P1...")
 
     # --- TRIGGER BUILDER (Exclusion Mutuelle Globale) ---
-    st.markdown("#### 1. Déclencheurs (ET logique)")
+    st.markdown("<h4 style='color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;'>1. Déclencheurs (ET logique)</h4>", unsafe_allow_html=True)
     
     for i, trig in enumerate(st.session_state.current_triggers):
         c1, c2, c3 = st.columns([1.5, 1.5, 2])
@@ -402,14 +411,14 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
     if len(st.session_state.current_triggers) < 3:
         st.button("➕ Ajouter condition", on_click=cb_add_trigger_condition)
     if len(st.session_state.current_triggers) > 1:
-        st.button("🗑️ Retirer dernière", on_click=cb_remove_trigger_condition)
+        st.button("🗑️ Retirer dernière condition", on_click=cb_remove_trigger_condition)
 
-    st.divider()
+    st.markdown("<br/>", unsafe_allow_html=True)
 
     # --- STEP BUILDER (BUFFER) ---
     is_edit_step = st.session_state.editing_step_idx != -1
-    title_step = "Modifier l'étape" if is_edit_step else "Ajouter une étape"
-    st.markdown(f"#### 2. Actions : {title_step}")
+    title_step = "Modifier l'étape" if is_edit_step else "Ajouter une action"
+    st.markdown(f"<h4 style='color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;'>2. Actions : {title_step}</h4>", unsafe_allow_html=True)
 
     with st.container(border=True):
         # LOGIQUE D'UNICITÉ 'UPDATE' ROBUSTE
@@ -490,15 +499,22 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
             cb2.button("Annuler édition", on_click=cb_clear_buffer)
 
     # --- LISTE DES ÉTAPES VALIDÉES ---
-    st.markdown("---")
+    st.markdown("<hr style='margin: 30px 0; border-color: #cbd5e1;'/>", unsafe_allow_html=True)
     if st.session_state.temp_steps:
         for idx, step in enumerate(st.session_state.temp_steps):
             act = step['action'].upper()
-            desc = ", ".join([f"{k}: {v}" for k, v in step['fields'].items()])
+            
+            # Formattage visuel des champs modifiés
+            fields_html = []
+            for k, v in step['fields'].items():
+                fields_html.append(f"<span style='background:#f1f5f9; padding:2px 8px; border-radius:12px; font-size:12px; color:#475569; font-weight:600;'>{k}: <span style='color:#5048e5;'>{v}</span></span>")
+            desc_html = " ".join(fields_html)
+            
+            icon = "🛠️" if act == "UPDATE" else "✨"
             
             with st.container(border=True):
                 c1, c2 = st.columns([4, 1])
-                c1.markdown(f"**{idx+1}. {act}** | {desc}")
+                c1.markdown(f"**{idx+1}. {icon} {act}**<br/><div style='margin-top:6px;'>{desc_html}</div>", unsafe_allow_html=True)
                 c2.button("✏️", key=f"ed_st_{idx}", on_click=cb_load_step_for_edit, args=(idx,))
                 c2.button("🗑️", key=f"del_st_{idx}", on_click=lambda x=idx: st.session_state.temp_steps.pop(x))
     
