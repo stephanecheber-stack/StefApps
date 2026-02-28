@@ -47,13 +47,14 @@ def init_state():
 # -----------------------------------------------------------------------------
 
 def cb_create_task():
-    if not st.session_state.create_title:
+    title = st.session_state.get("create_title", "").strip()
+    if not title:
         st.error("Le titre est obligatoire.")
         return
     payload = {
-        "title": st.session_state.create_title,
-        "description": st.session_state.create_desc,
-        "priority": st.session_state.create_priority,
+        "title": title,
+        "description": st.session_state.get("create_desc", ""),
+        "priority": st.session_state.get("create_priority", "Moyenne"),
         "assigned_to": st.session_state.get("create_assigned", "Non assigné")
     }
     try:
@@ -131,9 +132,8 @@ st.set_page_config(page_title="LiteFlow Manager", layout="wide", page_icon="⚡"
 def inject_custom_css():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
         /* Hide Streamlit Header, Footer, and MainMenu with high specificity */
         #MainMenu {visibility: hidden !important;}
         footer {visibility: hidden !important;}
@@ -143,9 +143,9 @@ def inject_custom_css():
         .block-container {
             padding-top: 2rem !important;
             padding-bottom: 0rem !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            max-width: 100% !important; /* Allow the layout to span wide */
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+            max-width: 100% !important;
         }
 
         /* Ensure the body takes full height and uses Inter font */
@@ -156,84 +156,81 @@ def inject_custom_css():
         /* Adjust for fixed headers if necessary in Streamlit context */
         .stApp {
             margin-top: -56px !important;
-            background-color: #f6f6f8; /* background-light */
-        }
-
-        /* --- STITCH METRICS PILLS --- */
-        .status-pill-resolved { background-color: #f0fdf4; color: #166534; }
-        .status-pill-pending { background-color: #fffbeb; color: #92400e; }
-        .status-pill-total { background-color: #eef2ff; color: #3730a3; }
-        
-        .card-shadow {
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-            transition: all 0.2s ease-in-out;
-        }
-        .card-shadow:hover {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
-            transform: translateY(-2px);
+            background-color: #f0f9ff; /* Very light sky blue background */
         }
 
         /* Sidebar Styling */
         [data-testid="stSidebar"] {
-            background-color: #ffffff;
-            border-right: 1px solid #e2e8f0;
+            background-color: #ffffff; /* White sidebar */
+            border-right: 1px solid #bae6fd; /* Light blue border */
         }
         
-        /* Containers */
+        /* Containers / Borders */
         [data-testid="stVerticalBlockBorderWrapper"] {
-            border-radius: 16px; /* 2xl matches stitch */
+            border-radius: 16px !important;
             background-color: #ffffff;
-            border: 1px solid #f1f5f9 !important;
+            border: 1px solid #e0f2fe !important; /* Sky blue border */
+            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.05), 0 2px 4px -1px rgba(14, 165, 233, 0.03) !important;
         }
 
         /* Buttons */
         [data-testid="baseButton-primary"] {
-            background-color: #5048e5;
-            border: none;
-            border-radius: 0.75rem; /* rounded-xl */
-            font-weight: 600;
+            background-color: #0ea5e9 !important; /* Sky Blue 500 */
+            border: none !important;
+            border-radius: 12px !important;
+            font-weight: 600 !important;
             color: #ffffff !important;
-            box-shadow: 0 4px 6px -1px rgba(80, 72, 229, 0.2), 0 2px 4px -2px rgba(80, 72, 229, 0.2);
+            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.3) !important;
         }
         [data-testid="baseButton-primary"]:hover {
-            opacity: 0.9;
+            opacity: 0.9 !important;
+            transform: translateY(-1px) !important;
         }
 
         [data-testid="baseButton-secondary"] {
-            border-radius: 0.75rem; /* rounded-xl */
-            border: 1px solid #e2e8f0;
-            background-color: #ffffff;
-            color: #475569;
-            font-weight: 600;
+            border-radius: 12px !important;
+            border: 1px solid #bae6fd !important;
+            background-color: #ffffff !important;
+            color: #0369a1 !important; /* Sky Blue 700 */
+            font-weight: 600 !important;
         }
         [data-testid="baseButton-secondary"]:hover {
-            background-color: #f8fafc;
+            background-color: #f0f9ff !important;
         }
 
         /* Inputs */
         div[data-baseweb="input"] input, div[data-baseweb="select"] {
-            border-radius: 0.75rem !important; /* rounded-xl */
-            background-color: #f1f5f9;
-            border: none;
+            border-radius: 12px !important;
+            background-color: #f8fafc !important;
+            border: 1px solid #e2e8f0 !important;
         }
         div[data-baseweb="input"]:focus-within, div[data-baseweb="select"]:focus-within {
-             outline: 2px solid rgba(80, 72, 229, 0.2); 
+             outline: 2px solid #38bdf8 !important; /* Sky Blue 400 */
         }
-
-        /* Titles and Tabs */
-        h1, h2, h3 {
-            font-weight: 700 !important;
-            letter-spacing: -0.025em; /* tracking-tight */
-            color: #0f172a; /* text-slate-900 */
-        }
+        
+        /* Adjust tabs */
         [data-testid="stTabs"] button {
-            font-weight: 600;
-            font-size: 1rem;
-            color: #64748b;
+            font-weight: 600 !important;
+            font-size: 1rem !important;
+            color: #64748b !important;
         }
         [data-testid="stTabs"] button[aria-selected="true"] {
-            color: #5048e5;
+            color: #0ea5e9 !important;
+            border-bottom-color: #0ea5e9 !important;
         }
+
+        /* Metrics Styling */
+        [data-testid="stMetricValue"] {
+            color: #0c4a6e !important; /* Sky Blue 900 */
+            font-weight: 800 !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-weight: 600 !important;
+            color: #0284c7 !important; /* Sky Blue 600 */
+            text-transform: uppercase !important;
+            letter-spacing: 0.05em !important;
+        }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -241,16 +238,7 @@ inject_custom_css()
 init_state()
 
 # SIDEBAR
-st.sidebar.markdown(
-    """
-    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
-        <div style="background-color: #5048e5; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-            <span class="material-symbols-outlined" style="color: white; font-size: 20px;">bolt</span>
-        </div>
-        <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; color: #0f172a;">LiteFlow <span style="color: #5048e5; font-weight: 500;">Pro</span></h1>
-    </div>
-    """, unsafe_allow_html=True
-)
+st.sidebar.markdown('<h2>⚡ LiteFlow <span style="color: #0ea5e9;">Pro</span></h2>', unsafe_allow_html=True)
 
 if not st.session_state.authenticated:
     pwd = st.sidebar.text_input("Code Admin", type="password")
@@ -268,18 +256,11 @@ st.sidebar.divider()
 st.sidebar.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;'>Création Express</p>", unsafe_allow_html=True)
 with st.sidebar.container(border=True):
     st.text_input("Titre du ticket", key="create_title", placeholder="Brève description...")
-    st.selectbox("Niveau de Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority", index=1)
+    st.selectbox("Niveau de Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority")
     st.selectbox("Assignation Automatique", st.session_state["support_groups"], key="create_assigned")
     st.button("➕ Créer le ticket", on_click=cb_create_task, width='stretch', type="primary")
 
-st.markdown(
-    """
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h1 style='color: #0f172a; margin: 0;'>Dashboard Opérationnel</h1>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+st.markdown("<h1>📊 Dashboard Opérationnel</h1>", unsafe_allow_html=True)
 
 tabs = st.tabs(["📋 Liste des tâches", "⚡ Flow Designer", "📊 Base de données", "🛠️ Admin Tools"])
 
@@ -307,12 +288,12 @@ with tabs[0]:
                         <div>
                             <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Total Tickets</p>
                             <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{total_tickets}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #059669; font-size: 14px; font-weight: 600;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #0ea5e9; font-size: 14px; font-weight: 600;">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">trending_up</span>
                                 <span>Volume Global</span>
                             </div>
                         </div>
-                        <div class="status-pill-total" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                        <div class="status-pill-total" style="background-color: #f0f9ff; color: #0284c7; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
                             <span class="material-symbols-outlined">confirmation_number</span>
                         </div>
                     </div>
@@ -321,12 +302,12 @@ with tabs[0]:
                         <div>
                             <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Résolus</p>
                             <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{resolved}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #059669; font-size: 14px; font-weight: 600;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #10b981; font-size: 14px; font-weight: 600;">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span>
                                 <span>Terminés</span>
                             </div>
                         </div>
-                        <div class="status-pill-resolved" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                        <div class="status-pill-resolved" style="background-color: #d1fae5; color: #047857; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
                             <span class="material-symbols-outlined">verified</span>
                         </div>
                     </div>
@@ -335,12 +316,12 @@ with tabs[0]:
                         <div>
                             <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">En Attente</p>
                             <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{pending}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #d97706; font-size: 14px; font-weight: 600;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #f59e0b; font-size: 14px; font-weight: 600;">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
                                 <span>En Cours</span>
                             </div>
                         </div>
-                        <div class="status-pill-pending" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                        <div class="status-pill-pending" style="background-color: #fef3c7; color: #b45309; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
                             <span class="material-symbols-outlined">hourglass_empty</span>
                         </div>
                     </div>
