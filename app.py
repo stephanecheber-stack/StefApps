@@ -12,7 +12,7 @@ from engine import normalize_status
 load_dotenv()
 
 # Configuration
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+API_URL = "http://localhost:8000"
 WORKFLOWS_FILE = "workflows.yaml"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "IMPOSSIBLE_PASSWORD_SEQUENCE_XYZ")
 
@@ -36,404 +36,220 @@ def init_state():
     if "delete_confirm_check" not in st.session_state: st.session_state.delete_confirm_check = False
     if "skip_workflow" not in st.session_state: st.session_state["skip_workflow"] = True
     if "support_groups" not in st.session_state: st.session_state["support_groups"] = fetch_groups_from_api()
+    if "grid_nonce" not in st.session_state: st.session_state.grid_nonce = 0
+    
+    # Form States
     if "create_title" not in st.session_state: st.session_state.create_title = ""
     if "create_desc" not in st.session_state: st.session_state.create_desc = ""
     if "create_priority" not in st.session_state: st.session_state.create_priority = "Moyenne"
+    if "create_assigned" not in st.session_state: st.session_state.create_assigned = "Non assigné"
     if "new_group_name" not in st.session_state: st.session_state.new_group_name = ""
-    if "grid_nonce" not in st.session_state: st.session_state.grid_nonce = 0
 
 # -----------------------------------------------------------------------------
 # CALLBACKS
 # -----------------------------------------------------------------------------
 
 def cb_create_task():
-    title = st.session_state.get("create_title", "").strip()
-    if not title:
+    if not st.session_state.create_title:
         st.error("Le titre est obligatoire.")
         return
     payload = {
-        "title": title,
-        "description": st.session_state.get("create_desc", ""),
-        "priority": st.session_state.get("create_priority", "Moyenne"),
-        "assigned_to": st.session_state.get("create_assigned", "Non assigné")
+        "title": st.session_state.create_title,
+        "description": st.session_state.create_desc,
+        "priority": st.session_state.create_priority,
+        "assigned_to": st.session_state.create_assigned
     }
     try:
-        response = requests.post(f"{API_URL}/tasks/", json=payload)
-        if response.status_code == 200:
+        if requests.post(f"{API_URL}/tasks/", json=payload).status_code == 200:
             st.session_state.create_title = ""
             st.session_state.create_desc = ""
-            st.toast("✅ Tâche créée !")
-    except: st.error("Erreur API")
+            st.toast("✅ Ticket créé")
+    except: st.error("API Error")
 
 def cb_update_task_dashboard(task_id):
-    """Met à jour le ticket sélectionné depuis le dashboard."""
     payload = {
         "title": st.session_state[f"edit_title_{task_id}"],
         "status": st.session_state[f"edit_status_{task_id}"],
         "priority": st.session_state[f"edit_priority_{task_id}"],
         "assigned_to": st.session_state[f"edit_assign_{task_id}"],
         "description": st.session_state[f"edit_desc_{task_id}"],
-        "tags": st.session_state[f"edit_tags_{task_id}"]
+        "tags": st.session_state.get(f"edit_tags_{task_id}", "")
     }
     try:
-        # On utilise la valeur de session pour le paramètre skip_workflow
-        skip_val = "true" if st.session_state.get("skip_workflow", False) else "false"
-        resp = requests.put(f"{API_URL}/tasks/{task_id}", json=payload, params={"skip_workflow": skip_val})
-        if resp.status_code == 200:
-            st.toast(f"✅ Ticket #{task_id} mis à jour !")
-    except: st.error("Erreur lors de la mise à jour.")
+        if requests.put(f"{API_URL}/tasks/{task_id}", json=payload).status_code == 200:
+            st.toast(f"✅ Mise à jour effectuée")
+    except: st.error("Erreur Update")
 
-def cb_delete_task(task_id, task_title):
-    """Callback pour la suppression avec nettoyage de la sélection."""
+def cb_delete_task(task_id):
     try:
-        # Suppression via API
-        requests.delete(f"{API_URL}/tasks/{task_id}", timeout=3)
-        
-        # KEY ROTATION : On change la clé pour forcer le re-render propre
-        st.session_state.grid_nonce += 1
-            
-        # Nettoyage des clés d'édition (Clean State)
-        keys_to_del = [k for k in st.session_state.keys() if k.startswith(f"edit_")]
-        for k in keys_to_del:
-            del st.session_state[k]
-        
-        st.session_state.delete_confirm_check = False
-        st.toast(f"🗑️ Ticket #{task_id} supprimé !")
-        
-        # On attend une fraction de seconde pour laisser la DB respirer (Cascade enfants)
-        time.sleep(0.3)
-    except Exception as e:
-        st.error(f"Erreur technique lors de la suppression : {e}")
-
-def cb_add_group():
-    name = st.session_state.new_group_name.strip()
-    if name:
-        try:
-            resp = requests.post(f"{API_URL}/groups/", json={"name": name})
-            if resp.status_code == 200:
-                st.session_state.new_group_name = "" 
-                refresh_groups()
-                st.toast(f"✅ Groupe '{name}' ajouté !")
-        except: st.error("Erreur API.")
-
-def cb_delete_group(group_id, group_name):
-    try:
-        if requests.delete(f"{API_URL}/groups/{group_id}").status_code == 200:
-            refresh_groups()
-            st.toast(f"🗑️ Groupe '{group_name}' supprimé !")
-    except: st.error("Erreur suppression.")
+        if requests.delete(f"{API_URL}/tasks/{task_id}").status_code == 200:
+            st.session_state.grid_nonce += 1
+            st.session_state.delete_confirm_check = False
+            st.toast("🗑️ Supprimé")
+    except: st.error("Erreur Delete")
 
 # -----------------------------------------------------------------------------
-# INTERFACE
+# STYLE & DESIGN (FIX RÉGRESSION)
 # -----------------------------------------------------------------------------
 
-st.set_page_config(page_title="LiteFlow Manager", layout="wide", page_icon="⚡", initial_sidebar_state="expanded")
-
-def inject_custom_css():
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
-        /* Hide Streamlit Header, Footer, and MainMenu with high specificity */
-        #MainMenu {visibility: hidden !important;}
-        footer {visibility: hidden !important;}
-        header {visibility: hidden !important;}
-        
-        /* Remove Streamlit default padding and max-width constraints */
-        .block-container {
-            padding-top: 2rem !important;
-            padding-bottom: 0rem !important;
-            padding-left: 2rem !important;
-            padding-right: 2rem !important;
-            max-width: 100% !important;
-        }
-
-        /* Ensure the body takes full height and uses Inter font */
-        html, body, [class*="css"], [class*="st-"] {
-            font-family: 'Inter', sans-serif !important;
-        }
-
-        /* Adjust for fixed headers if necessary in Streamlit context */
-        .stApp {
-            margin-top: -56px !important;
-            background-color: #f0f9ff; /* Very light sky blue background */
-        }
-
-        /* Sidebar Styling */
-        [data-testid="stSidebar"] {
-            background-color: #ffffff; /* White sidebar */
-            border-right: 1px solid #bae6fd; /* Light blue border */
-        }
-        
-        /* Containers / Borders */
-        [data-testid="stVerticalBlockBorderWrapper"] {
-            border-radius: 16px !important;
-            background-color: #ffffff;
-            border: 1px solid #e0f2fe !important; /* Sky blue border */
-            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.05), 0 2px 4px -1px rgba(14, 165, 233, 0.03) !important;
-        }
-
-        /* Buttons */
-        [data-testid="baseButton-primary"] {
-            background-color: #0ea5e9 !important; /* Sky Blue 500 */
-            border: none !important;
-            border-radius: 12px !important;
-            font-weight: 600 !important;
-            color: #ffffff !important;
-            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.3) !important;
-        }
-        [data-testid="baseButton-primary"]:hover {
-            opacity: 0.9 !important;
-            transform: translateY(-1px) !important;
-        }
-
-        [data-testid="baseButton-secondary"] {
-            border-radius: 12px !important;
-            border: 1px solid #bae6fd !important;
-            background-color: #ffffff !important;
-            color: #0369a1 !important; /* Sky Blue 700 */
-            font-weight: 600 !important;
-        }
-        [data-testid="baseButton-secondary"]:hover {
-            background-color: #f0f9ff !important;
-        }
-
-        /* Inputs */
-        div[data-baseweb="input"] input, div[data-baseweb="select"] {
-            border-radius: 12px !important;
-            background-color: #f8fafc !important;
-            border: 1px solid #e2e8f0 !important;
-        }
-        div[data-baseweb="input"]:focus-within, div[data-baseweb="select"]:focus-within {
-             outline: 2px solid #38bdf8 !important; /* Sky Blue 400 */
-        }
-        
-        /* Adjust tabs */
-        [data-testid="stTabs"] button {
-            font-weight: 600 !important;
-            font-size: 1rem !important;
-            color: #64748b !important;
-        }
-        [data-testid="stTabs"] button[aria-selected="true"] {
-            color: #0ea5e9 !important;
-            border-bottom-color: #0ea5e9 !important;
-        }
-
-        /* Metrics Styling */
-        [data-testid="stMetricValue"] {
-            color: #0c4a6e !important; /* Sky Blue 900 */
-            font-weight: 800 !important;
-        }
-        [data-testid="stMetricLabel"] {
-            font-weight: 600 !important;
-            color: #0284c7 !important; /* Sky Blue 600 */
-            text-transform: uppercase !important;
-            letter-spacing: 0.05em !important;
-        }
-
-    </style>
-    """, unsafe_allow_html=True)
-
-inject_custom_css()
+st.set_page_config(page_title="LiteFlow Pro", layout="wide", page_icon="⚡")
 init_state()
 
-# SIDEBAR
-st.sidebar.markdown('<h2>⚡ LiteFlow <span style="color: #0ea5e9;">Pro</span></h2>', unsafe_allow_html=True)
+st.markdown("""
+<style>
+    /* 1. Fond Global Cloud */
+    .stApp { background-color: #f1f5f9; }
 
-if not st.session_state.authenticated:
-    pwd = st.sidebar.text_input("Code Admin", type="password")
-    if st.sidebar.button("Déverrouiller", width='stretch'):
-        if pwd == ADMIN_PASSWORD:
-            st.session_state.authenticated = True
+    /* 2. Sidebar Navy sans blocs blancs */
+    section[data-testid="stSidebar"] { 
+        background-color: #0f172a !important; 
+    }
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] .stMarkdown p { 
+        color: #ffffff !important; 
+    }
+
+    /* 3. Boutons - BLEU ACTION SAAS */
+    .stButton > button {
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        width: 100% !important;
+    }
+    .stButton > button:hover {
+        background-color: #1d4ed8 !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+    }
+
+    /* 4. En-têtes page principale */
+    h1, h2, h3, h4 { color: #0f172a !important; font-weight: 700 !important; }
+
+    /* 5. Cartes KPI (Texte blanc sur Navy) */
+    .kpi-card {
+        background-color: #0f172a;
+        border-radius: 12px;
+        padding: 20px;
+        color: #ffffff;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        border: 1px solid #1e293b;
+    }
+    .kpi-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+    .kpi-value { font-size: 2.2rem; font-weight: 800; color: #ffffff; margin: 5px 0; }
+
+    /* 6. Conteneurs Main Content - Blanc Pur */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- SIDEBAR (Navy Profond) ---
+with st.sidebar:
+    st.markdown("# ⚡ LiteFlow Pro")
+    
+    if not st.session_state.authenticated:
+        pwd = st.text_input("Accès Admin", type="password")
+        if st.button("DÉVERROUILLER"):
+            if pwd == ADMIN_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+    else:
+        st.success("Administrateur")
+        if st.button("QUITTER LA SESSION"):
+            st.session_state.authenticated = False
             st.rerun()
-else:
-    st.sidebar.success("✅ Administration déverrouillée")
-    if st.sidebar.button("Se déconnecter", width='stretch'):
-        st.session_state.authenticated = False
-        st.rerun()
 
-st.sidebar.divider()
-st.sidebar.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;'>Création Express</p>", unsafe_allow_html=True)
-with st.sidebar.container(border=True):
-    st.text_input("Titre du ticket", key="create_title", placeholder="Brève description...")
-    st.selectbox("Niveau de Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority")
-    st.selectbox("Assignation Automatique", st.session_state["support_groups"], key="create_assigned")
-    st.button("➕ Créer le ticket", on_click=cb_create_task, width='stretch', type="primary")
+    st.divider()
+    st.markdown("### 🚀 CRÉATION EXPRESS")
+    # Pas de container blanc ici pour respecter le Navy
+    st.text_input("Titre du ticket", key="create_title", placeholder="Sujet...")
+    st.text_area("Description...", key="create_desc", height=70)
+    st.selectbox("Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority")
+    st.selectbox("Assignation", st.session_state["support_groups"], key="create_assigned")
+    st.button("➕ OUVRIR LE TICKET", on_click=cb_create_task)
 
-st.markdown("<h1>📊 Dashboard Opérationnel</h1>", unsafe_allow_html=True)
+# --- MAIN ---
+st.title("📑 Dashboard Opérationnel")
 
-tabs = st.tabs(["📋 Liste des tâches", "⚡ Flow Designer", "📊 Base de données", "🛠️ Admin Tools"])
+tabs = st.tabs(["📋 Liste des tâches", "⚡ Flow Designer", "🗄️ Base de données", "🛠️ Admin Tools"])
 
 # --- TAB 1: DASHBOARD ---
 with tabs[0]:
-    c1, c2 = st.columns([1, 4])
-    with c1: st.button("🔄 Actualiser", width='stretch')
-    with c2: search = st.text_input("Recherche rapide", placeholder="Rechercher par mot-clé, ID, ou assigné...", label_visibility="collapsed")
-
     try:
         resp = requests.get(f"{API_URL}/tasks/?limit=1000")
         if resp.status_code == 200:
             all_data = resp.json()
-            if all_data:
-                # Calcul des statistiques pour les Metrics (Stitch Layout)
-                total_tickets = len(all_data)
-                resolved = len([t for t in all_data if normalize_status(t['status']) == "Terminé"])
-                pending = total_tickets - resolved
-                
-                # HTML Metrics Dashboard using Stitch Design
-                st.markdown(f"""
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <!-- Total Metrics -->
-                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Total Tickets</p>
-                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{total_tickets}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #0ea5e9; font-size: 14px; font-weight: 600;">
-                                <span class="material-symbols-outlined" style="font-size: 18px;">trending_up</span>
-                                <span>Volume Global</span>
-                            </div>
-                        </div>
-                        <div class="status-pill-total" style="background-color: #f0f9ff; color: #0284c7; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                            <span class="material-symbols-outlined">confirmation_number</span>
-                        </div>
-                    </div>
-                    <!-- Resolved -->
-                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">Résolus</p>
-                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{resolved}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #10b981; font-size: 14px; font-weight: 600;">
-                                <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span>
-                                <span>Terminés</span>
-                            </div>
-                        </div>
-                        <div class="status-pill-resolved" style="background-color: #d1fae5; color: #047857; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                            <span class="material-symbols-outlined">verified</span>
-                        </div>
-                    </div>
-                    <!-- Pending -->
-                    <div class="card-shadow" style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0;">En Attente</p>
-                            <h3 style="font-size: 2.25rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0 0;">{pending}</h3>
-                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #f59e0b; font-size: 14px; font-weight: 600;">
-                                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                                <span>En Cours</span>
-                            </div>
-                        </div>
-                        <div class="status-pill-pending" style="background-color: #fef3c7; color: #b45309; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                            <span class="material-symbols-outlined">hourglass_empty</span>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            df = pd.DataFrame(all_data) if all_data else pd.DataFrame()
+            
+            # KPI Cards
+            k1, k2, k3 = st.columns(3)
+            with k1: st.markdown(f'<div class="kpi-card"><div class="kpi-label">📊 Tickets Totaux</div><div class="kpi-value">{len(df)}</div></div>', unsafe_allow_html=True)
+            with k2: 
+                res = len(df[df['status'] == 'Terminé']) if not df.empty else 0
+                st.markdown(f'<div class="kpi-card"><div class="kpi-label">✅ Clôturés</div><div class="kpi-value">{res}</div></div>', unsafe_allow_html=True)
+            with k3:
+                act = len(df[df['status'] != 'Terminé']) if not df.empty else 0
+                st.markdown(f'<div class="kpi-card"><div class="kpi-label">⏳ En Attente</div><div class="kpi-value">{act}</div></div>', unsafe_allow_html=True)
 
-                df = pd.DataFrame(all_data)
+            st.write("") # Spacer
+            
+            search = st.text_input("Recherche rapide", placeholder="Filtrer...", label_visibility="collapsed")
+            if not df.empty:
                 status_map = {"Nouveau": "🔵 Nouveau", "À faire": "🟡 À faire", "En cours": "🟢 En cours", "Terminé": "⚪ Terminé"}
-                priority_map = {"Critique": "🚨 Critique", "Haute": "🔴 Haute", "Moyenne": "🟠 Moyenne", "Basse": "🟢 Basse"}
-                
+                priority_map = {"Critique": "🔥 Critique", "Haute": "🔴 Haute", "Moyenne": "🟠 Moyenne", "Basse": "🔵 Basse"}
                 df['status_view'] = df['status'].apply(lambda x: status_map.get(normalize_status(x), x))
                 df['priority_view'] = df['priority'].apply(lambda x: priority_map.get(x, x))
                 
                 if search:
-                    df = df[df.apply(lambda row: search.lower() in row.astype(str).str.lower().values, axis=1)]
+                    df = df[df.apply(lambda r: search.lower() in r.astype(str).str.lower().values, axis=1)]
 
-                # GRILLE DE DONNÉES
-                # Key Rotation Pattern
-                grid_key = f"main_grid_{st.session_state.grid_nonce}"
-
-                selection = st.dataframe(
+                sel = st.dataframe(
                     df[['id', 'title', 'status_view', 'priority_view', 'assigned_to', 'parent_id']],
-                    width='stretch', 
-                    hide_index=True, 
-                    on_select="rerun", 
-                    selection_mode="single-row", 
-                    key=grid_key
+                    width='stretch', hide_index=True, on_select="rerun", selection_mode="single-row", 
+                    key=f"grid_nonce_{st.session_state.grid_nonce}"
                 )
 
-                # ÉDITEUR DE TICKET (Apparaît lors de la sélection)
-                if selection and len(selection.selection.rows) > 0:
-                    selected_idx = list(selection.selection.rows)[0]
-                    
-                    # BLINDAGE : Si l'index est hors limites (suppression concurrente), on reload
-                    if selected_idx >= len(all_data):
-                        st.rerun()
-                    
-                    t = all_data[selected_idx]
+                if sel and len(sel.selection.rows) > 0:
+                    t = df.iloc[list(sel.selection.rows)[0]]
                     tid = t['id']
-
-                    st.markdown(f"""
-                        <div style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;">
-                            <span style="background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-weight: 700; color: #475569; font-size: 14px;">#{tid}</span>
-                            <h3 style="margin: 0; padding: 0;">Gestion du Ticket</h3>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
+                    st.markdown(f"### 🔎 Édition Ticket #{tid}")
                     with st.container(border=True):
-                        col_a, col_b = st.columns(2)
+                        ca, cb = st.columns(2)
+                        with ca:
+                            st.text_input("Titre", value=t['title'], key=f"edit_title_{tid}")
+                            curr_st = normalize_status(t['status']); st_opts = ["Nouveau", "À faire", "En cours", "Terminé"]
+                            st.selectbox("Statut", st_opts, index=st_opts.index(curr_st) if curr_st in st_opts else 0, key=f"edit_status_{tid}")
+                        with cb:
+                            st.selectbox("Urgence", ["Basse", "Moyenne", "Haute", "Critique"], index=["Basse", "Moyenne", "Haute", "Critique"].index(t['priority']), key=f"edit_priority_{tid}")
+                            st.selectbox("Assigné", st.session_state["support_groups"], index=st.session_state["support_groups"].index(t['assigned_to']) if t['assigned_to'] in st.session_state["support_groups"] else 0, key=f"edit_assign_{tid}")
                         
-                        with col_a:
-                            st.text_input("Titre du ticket", value=t['title'], key=f"edit_title_{tid}")
+                        st.text_area("Description", value=t.get('description', ""), key=f"edit_desc_{tid}")
                         
-                        # Statut avec normalisation pour l'index
-                        curr_st = normalize_status(t['status'])
-                        st_opts = ["Nouveau", "À faire", "En cours", "Terminé"]
-                        st.selectbox("Statut (Cycle de vie)", st_opts, index=st_opts.index(curr_st) if curr_st in st_opts else 0, key=f"edit_status_{tid}")
-                        
-                        st.selectbox("Niveau d'urgence", ["Basse", "Moyenne", "Haute", "Critique"], index=["Basse", "Moyenne", "Haute", "Critique"].index(t['priority']), key=f"edit_priority_{tid}")
+                        btn1, btn2, _ = st.columns([1, 1, 2])
+                        btn1.button("💾 ENREGISTRER", type="primary", on_click=cb_update_task_dashboard, args=(tid,), width='stretch')
+                        if st.session_state.authenticated:
+                            btn2.button("🗑️ SUPPRIMER", on_click=cb_delete_task, args=(tid,), width='stretch')
+            else: st.info("Aucun ticket.")
+    except: st.error("Erreur API.")
 
-                        with col_b:
-                            st.selectbox("Groupe assigné", st.session_state["support_groups"], index=st.session_state["support_groups"].index(t['assigned_to']) if t['assigned_to'] in st.session_state["support_groups"] else 0, key=f"edit_assign_{tid}")
-                            st.text_input("Tags / Étiquettes", value=t['tags'] or "", key=f"edit_tags_{tid}")
-                            st.text_area("Description / Historique", value=t['description'] or "", key=f"edit_desc_{tid}", height=115)
-
-                    # BOUTONS D'ACTION
-                    act_col1, act_col2, act_col3 = st.columns([1, 1, 2])
-                    
-                    act_col1.button("💾 Enregistrer les modifications", type="primary", on_click=cb_update_task_dashboard, args=(tid,), width='stretch')
-                    
-                    # Bouton Supprimer réservé à l'ADMIN
-                    if st.session_state.authenticated:
-                        if act_col2.button("🗑️ Supprimer l'enregistrement", type="secondary", width='stretch'):
-                            cb_delete_task(tid, t['title'])
-                            st.rerun()
-                    else:
-                        act_col2.info("🔓 Login Admin pour supprimer")
-            else:
-                st.info("Aucun ticket en cours.")
-    except: st.error("Lien avec l'API perdu.")
-
-# --- FLOW DESIGNER ---
+# --- AUTRES TABS (SÉCURISÉS) ---
 with tabs[1]:
-    if st.session_state.authenticated:
-        show_flow_designer(API_URL, WORKFLOWS_FILE, st.session_state["support_groups"])
-    else: st.warning("🔒 Authentification requise.")
+    if st.session_state.authenticated: show_flow_designer(API_URL, WORKFLOWS_FILE, st.session_state["support_groups"])
+    else: st.warning("🔐 Accès Admin requis.")
 
-# --- BASE DE DONNÉES ---
 with tabs[2]:
     if st.session_state.authenticated:
-        st.header("📊 Master Data : Groupes")
-        with st.container(border=True):
-            c_in, c_bt = st.columns([3, 1])
-            c_in.text_input("Nom du nouveau groupe", key="new_group_name")
-            c_bt.button("Ajouter", on_click=cb_add_group, width='stretch', type="primary")
-        
-        try:
-            r_gr = requests.get(f"{API_URL}/groups/")
-            if r_gr.status_code == 200:
-                gr_data = r_gr.json()
-                if gr_data:
-                    st.dataframe(pd.DataFrame(gr_data), width='stretch', hide_index=True)
-                    st.divider()
-                    g_del = st.selectbox("Sélectionner un groupe à retirer", options=gr_data, format_func=lambda x: x['name'])
-                    st.button("🗑️ Supprimer le groupe", on_click=cb_delete_group, args=(g_del['id'], g_del['name']), type="primary")
-        except: st.error("Erreur base.")
-
-# --- ADMINISTRATION ---
-with tabs[3]:
-    st.info("Espace de maintenance système.")
-    if st.session_state.authenticated:
-        st.write("L'administration complète est active.")
-        st.checkbox("Désactiver le workflow lors des updates", key="skip_workflow")
-    else:
-        st.warning("Veuillez vous connecter via la barre latérale.")
+        st.header("🗄️ Base de données")
+        r_g = requests.get(f"{API_URL}/groups/")
+        if r_g.status_code == 200: st.dataframe(pd.DataFrame(r_g.json()), width='stretch', hide_index=True)
