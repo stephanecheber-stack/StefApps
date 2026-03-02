@@ -31,7 +31,7 @@ def read_tasks(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 @app.post("/tasks/")
 def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db)):
-    db_task = models.Task(**task.dict())
+    db_task = models.Task(**task.model_dump())
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
@@ -54,7 +54,7 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     old_status = db_task.status
-    update_data = task_update.dict(exclude_unset=True)
+    update_data = task_update.model_dump(exclude_unset=True)
     
     for key, value in update_data.items():
         setattr(db_task, key, value)
@@ -112,6 +112,35 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
         db.delete(db_group)
         db.commit()
     return {"message": "Group deleted"}
+
+# -----------------------------------------------------------------------------
+# ROUTES DES ASSETS (CMDB)
+# -----------------------------------------------------------------------------
+
+@app.get("/assets/", response_model=list[schemas.Asset])
+def read_assets(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(models.Asset).offset(skip).limit(limit).all()
+
+@app.post("/assets/", response_model=schemas.Asset)
+def create_asset(asset: schemas.AssetCreate, db: Session = Depends(get_db)):
+    db_asset = models.Asset(**asset.model_dump())
+    db.add(db_asset)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Serial number already exists")
+    db.refresh(db_asset)
+    return db_asset
+
+@app.delete("/assets/{asset_id}")
+def delete_asset(asset_id: int, db: Session = Depends(get_db)):
+    db_asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
+    if not db_asset:
+        return {"message": "Success (idempotent)"}
+    db.delete(db_asset)
+    db.commit()
+    return {"message": "Asset deleted"}
 
 # -----------------------------------------------------------------------------
 # ROUTES ADMIN & MAINTENANCE (INDISPENSABLES POUR L'ONGLET ADMIN TOOLS)

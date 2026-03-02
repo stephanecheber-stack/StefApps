@@ -2,24 +2,23 @@
 import streamlit as st
 import requests
 import pandas as pd
+import time
 import os
 from dotenv import load_dotenv
 from flow_components import show_flow_designer
 from engine import normalize_status
 
-# Load Environment Variables
+# --- CONFIGURATION & SÉCURITÉ ---
 load_dotenv()
-
-# Configuration
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 WORKFLOWS_FILE = "workflows.yaml"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "IMPOSSIBLE_PASSWORD_SEQUENCE_XYZ")
 
 # -----------------------------------------------------------------------------
-# LOGIQUE DE DONNÉES
+# LOGIQUE DE DONNÉES (SESSION & API)
 # -----------------------------------------------------------------------------
 
-def fetch_groups_from_api():
+def fetch_groups():
     try:
         resp = requests.get(f"{API_URL}/groups/", timeout=3)
         if resp.status_code == 200:
@@ -27,61 +26,74 @@ def fetch_groups_from_api():
     except: pass
     return ["Non assigné"]
 
-def refresh_groups():
-    st.session_state["support_groups"] = fetch_groups_from_api()
-
 def init_state():
+    """Initialisation du moteur d'état Streamlit."""
     if "authenticated" not in st.session_state: st.session_state.authenticated = False
-    if "delete_confirm_check" not in st.session_state: st.session_state.delete_confirm_check = False
-    if "skip_workflow" not in st.session_state: st.session_state["skip_workflow"] = True
-    if "support_groups" not in st.session_state: st.session_state["support_groups"] = fetch_groups_from_api()
-    if "grid_nonce" not in st.session_state: st.session_state.grid_nonce = 0
     if "active_kpi_filter" not in st.session_state: st.session_state.active_kpi_filter = "Total"
+    if "grid_nonce" not in st.session_state: st.session_state.grid_nonce = 0
+    if "support_groups" not in st.session_state: st.session_state["support_groups"] = fetch_groups()
     
-    if "create_title" not in st.session_state: st.session_state.create_title = ""
-    if "create_desc" not in st.session_state: st.session_state.create_desc = ""
+    # Formulaires
+    fields = ["create_title", "create_desc", "create_tags", "new_group_name"]
+    for f in fields:
+        if f not in st.session_state: st.session_state[f] = ""
     if "create_priority" not in st.session_state: st.session_state.create_priority = "Moyenne"
-    if "create_assigned" not in st.session_state: st.session_state.create_assigned = "Non assigné"
 
 # -----------------------------------------------------------------------------
-# CALLBACKS
+# CALLBACKS (Standard Architecte : Pas de st.rerun interne)
 # -----------------------------------------------------------------------------
 
-def cb_set_kpi_filter(filter_name):
-    if st.session_state.active_kpi_filter == filter_name and filter_name != "Total":
-        st.session_state.active_kpi_filter = "Total"
-    else:
-        st.session_state.active_kpi_filter = filter_name
+def cb_set_kpi(filter_name):
+    st.session_state.active_kpi_filter = "Total" if st.session_state.active_kpi_filter == filter_name and filter_name != "Total" else filter_name
 
 def cb_create_task():
     if not st.session_state.create_title:
-        st.toast("❌ Le titre est obligatoire.", icon="🚨")  # FIX #5 : st.error() invisible dans les callbacks
-        return
+        st.error("Titre obligatoire"); return
     payload = {
-        "title": st.session_state.create_title, "description": st.session_state.create_desc,
-        "priority": st.session_state.create_priority, "assigned_to": st.session_state.create_assigned
+        "title": st.session_state.create_title,
+        "description": st.session_state.create_desc,
+        "priority": st.session_state.create_priority,
+        "assigned_to": st.session_state.get("create_assigned", "Non assigné")
     }
     try:
-        if requests.post(f"{API_URL}/tasks/", json=payload, timeout=5).status_code == 200:
+        if requests.post(f"{API_URL}/tasks/", json=payload).status_code == 200:
             st.session_state.create_title = ""; st.session_state.create_desc = ""
-            st.toast("✅ Ticket créé")
-    except requests.exceptions.RequestException as e:  # FIX OBS #3 : except typé
-        st.toast(f"❌ Erreur API : {e}", icon="🚨")
+            st.toast("✅ Ticket créé !")
+    except: st.error("Erreur API")
 
-def cb_update_task_dashboard(task_id):
+def cb_update_task(tid):
     payload = {
-        "title": st.session_state[f"edit_title_{task_id}"], "status": st.session_state[f"edit_status_{task_id}"],
-        "priority": st.session_state[f"edit_priority_{task_id}"], "assigned_to": st.session_state[f"edit_assign_{task_id}"],
-        "description": st.session_state[f"edit_desc_{task_id}"], "tags": st.session_state.get(f"edit_tags_{task_id}", "")
+        "title": st.session_state[f"edit_t_{tid}"],
+        "status": st.session_state[f"edit_s_{tid}"],
+        "priority": st.session_state[f"edit_p_{tid}"],
+        "assigned_to": st.session_state[f"edit_a_{tid}"],
+        "description": st.session_state[f"edit_d_{tid}"]
     }
     try:
-        if requests.put(f"{API_URL}/tasks/{task_id}", json=payload, timeout=5).status_code == 200:  # FIX #3 : timeout
-            st.toast("✅ Modifications enregistrées")
-    except requests.exceptions.RequestException as e:  # FIX OBS #3 : except typé
-        st.toast(f"❌ Erreur mise à jour : {e}", icon="🚨")
+        if requests.put(f"{API_URL}/tasks/{tid}", json=payload).status_code == 200:
+            st.toast("✅ Mis à jour")
+    except: st.error("Erreur")
+
+def cb_delete_task(tid):
+    try:
+        if requests.delete(f"{API_URL}/tasks/{tid}").status_code == 200:
+            st.session_state.grid_nonce += 1
+            st.toast("🗑️ Supprimé")
+    except: st.error("Erreur")
+
+def cb_group_action(action, name=None, gid=None):
+    try:
+        if action == "add":
+            requests.post(f"{API_URL}/groups/", json={"name": name})
+            st.session_state.new_group_name = ""
+        elif action == "del":
+            requests.delete(f"{API_URL}/groups/{gid}")
+        st.session_state["support_groups"] = fetch_groups()
+        st.toast(f"✅ Groupe mis à jour")
+    except: st.error("Erreur Base de données")
 
 # -----------------------------------------------------------------------------
-# STYLE CSS FINAL (HAUTE VISIBILITÉ)
+# INTERFACE & STYLE CSS (CIBLAGE DIRECT DATA-TESTID)
 # -----------------------------------------------------------------------------
 
 st.set_page_config(page_title="LiteFlow Pro", layout="wide", page_icon="⚡")
@@ -89,152 +101,144 @@ init_state()
 
 st.markdown("""
 <style>
-    /* Fond Cloud */
+    /* Global & Sidebar */
     .stApp { background-color: #f1f5f9; }
-
-    /* Sidebar Navy */
     section[data-testid="stSidebar"] { background-color: #0f172a !important; }
-    section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] h1 { color: white !important; }
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] label, .sidebar-title { color: white !important; font-weight: 800 !important; }
+    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
 
-    /* STYLE GÉNÉRAL DES BOUTONS KPI */
-    .kpi-btn-container .stButton > button {
-        height: 100px !important;
-        width: 100% !important;
-        border-radius: 12px !important;
-        font-size: 1.1rem !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
+    /* BOUTONS SECONDAIRES (Standard / Inactif) -> BLEU SAAS */
+    button[data-testid="stBaseButton-secondary"] {
+        background-color: #2563eb !important;
+        color: white !important;
         border: none !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        white-space: pre-wrap !important; /* Permet le retour à la ligne */
+        font-weight: 700 !important;
+        height: 3rem !important;
     }
 
-    /* INACTIF : BLEU MARINE PROCHÉ SIDEBAR */
-    .kpi-inactive .stButton > button {
-        background-color: #0f172a !important;
-    }
-    .kpi-inactive .stButton > button:hover {
-        background-color: #1e293b !important;
-    }
-
-    /* ACTIF : VERT FONCÉ ACTION */
-    .kpi-active .stButton > button {
+    /* BOUTONS PRIMAIRES (KPI Actif) -> VERT FONCÉ */
+    button[data-testid="stBaseButton-primary"] {
         background-color: #064e3b !important;
+        color: white !important;
         border: 2px solid #10b981 !important;
+        font-weight: 800 !important;
+        height: 3rem !important;
     }
 
+    /* Cards KPI (Conteneurs) */
+    .kpi-card { background-color: #0f172a; border-radius: 12px; padding: 20px; color: white; min-height: 100px; margin-bottom: 10px; }
+    
     /* Conteneurs Blancs */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 12px !important;
-    }
+    [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- BARRE LATÉRALE ---
 with st.sidebar:
     st.markdown("# ⚡ LiteFlow Pro")
     if not st.session_state.authenticated:
-        pwd = st.text_input("Accès Admin", type="password")
-        if st.button("DÉVERROUILLER"):
+        pwd = st.text_input("Code Admin", type="password")
+        if st.button("DÉVERROUILLER", type="secondary"):
             if pwd == ADMIN_PASSWORD:
                 st.session_state.authenticated = True; st.rerun()
     else:
-        st.success("Administrateur")
-        if st.button("QUITTER"): st.session_state.authenticated = False; st.rerun()
+        st.success("Admin Connecté")
+        if st.button("QUITTER", type="secondary"): st.session_state.authenticated = False; st.rerun()
+
     st.divider()
-    st.markdown("### 🚀 CRÉATION")
+    st.markdown('<p class="sidebar-title">CRÉATION</p>', unsafe_allow_html=True)
     st.text_input("Titre", key="create_title")
-    st.text_area("Description", key="create_desc", height=80)  # FIX #6 : champ description manquant
+    st.text_area("Description", key="create_desc", height=100)
     st.selectbox("Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority")
-    st.selectbox("Assigné à", st.session_state["support_groups"], key="create_assigned")
+    st.selectbox("Assignation", st.session_state["support_groups"], key="create_assigned")
     st.button("OUVRIR LE TICKET", on_click=cb_create_task, type="secondary")
 
-# --- MAIN DASHBOARD ---
+# --- NAVIGATION ---
 st.title("📑 Dashboard Opérationnel")
-tabs = st.tabs(["📋 Liste", "⚡ Flow Designer", "🗄️ Base de données", "🛠️ Admin"])
+tabs = st.tabs(["📋 Dashboard", "⚡ Flow Designer", "🗄️ Base de données", "🛠️ Admin Tools"])
 
+# --- TAB 1 : DASHBOARD ---
 with tabs[0]:
     try:
-        resp = requests.get(f"{API_URL}/tasks/?limit=1000", timeout=5)  # FIX #3 : timeout ajouté
+        resp = requests.get(f"{API_URL}/tasks/?limit=1000")
         if resp.status_code == 200:
-            all_data = resp.json()
-            df_base = pd.DataFrame(all_data) if all_data else pd.DataFrame()
+            data = resp.json()
+            df = pd.DataFrame(data) if data else pd.DataFrame()
             
-            # Calculs
-            total_n = len(df_base)
-            res_n = len(df_base[df_base['status'] == 'Terminé']) if not df_base.empty else 0
-            pend_n = total_n - res_n
-            
-            # KPI DYNAMIQUES
+            # KPI ROW
             k1, k2, k3 = st.columns(3)
+            tot, res = len(df), len(df[df['status'] == 'Terminé']) if not df.empty else 0
             
-            with k1:
-                active = st.session_state.active_kpi_filter == "Total"
-                st.markdown(f'<div class="{"kpi-active" if active else "kpi-inactive"} kpi-btn-container">', unsafe_allow_html=True)
-                st.button(f"📊 {total_n}\nTICKETS TOTAUX", on_click=cb_set_kpi_filter, args=("Total",), key="k_tot")
-                st.markdown('</div>', unsafe_allow_html=True)
+            with k1: st.button(f"📊 {tot}\nTOTAL", on_click=cb_set_kpi, args=("Total",), type="primary" if st.session_state.active_kpi_filter == "Total" else "secondary", use_container_width=True)
+            with k2: st.button(f"✅ {res}\nCLÔTURÉS", on_click=cb_set_kpi, args=("Clotures",), type="primary" if st.session_state.active_kpi_filter == "Clotures" else "secondary", use_container_width=True)
+            with k3: st.button(f"⏳ {tot-res}\nEN ATTENTE", on_click=cb_set_kpi, args=("Attente",), type="primary" if st.session_state.active_kpi_filter == "Attente" else "secondary", use_container_width=True)
 
-            with k2:
-                active = st.session_state.active_kpi_filter == "Clotures"
-                st.markdown(f'<div class="{"kpi-active" if active else "kpi-inactive"} kpi-btn-container">', unsafe_allow_html=True)
-                st.button(f"✅ {res_n}\nCLÔTURÉS", on_click=cb_set_kpi_filter, args=("Clotures",), key="k_res")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            with k3:
-                active = st.session_state.active_kpi_filter == "Attente"
-                st.markdown(f'<div class="{"kpi-active" if active else "kpi-inactive"} kpi-btn-container">', unsafe_allow_html=True)
-                st.button(f"⏳ {pend_n}\nEN ATTENTE", on_click=cb_set_kpi_filter, args=("Attente",), key="k_pend")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            # Logique de Filtrage
-            f_data = all_data
-            if st.session_state.active_kpi_filter == "Clotures":
-                f_data = [t for t in f_data if t['status'] == 'Terminé']
-            elif st.session_state.active_kpi_filter == "Attente":
-                f_data = [t for t in f_data if t['status'] != 'Terminé']
+            # Filtrage
+            f_data = data
+            if st.session_state.active_kpi_filter == "Clotures": f_data = [t for t in data if t['status'] == 'Terminé']
+            elif st.session_state.active_kpi_filter == "Attente": f_data = [t for t in data if t['status'] != 'Terminé']
             
             st.divider()
-            search = st.text_input("Recherche rapide", placeholder="Filtrer...", label_visibility="collapsed")
-            if search:
-                f_data = [t for t in f_data if any(search.lower() in str(v).lower() for v in t.values())]
-
             if f_data:
-                df = pd.DataFrame(f_data)
-                status_map = {"Nouveau": "🔵 Nouveau", "À faire": "🟡 À faire", "En cours": "🟢 En cours", "Terminé": "⚪ Terminé"}
-                df['status_view'] = df['status'].apply(lambda x: status_map.get(normalize_status(x), x))
-                
-                sel = st.dataframe(df[['id', 'title', 'status_view', 'priority', 'assigned_to']], width='stretch', hide_index=True, on_select="rerun", selection_mode="single-row", key=f"grid_{st.session_state.grid_nonce}")
+                df_view = pd.DataFrame(f_data)
+                df_view['status'] = df_view['status'].apply(normalize_status)
+                sel = st.dataframe(df_view[['id', 'title', 'status', 'priority', 'assigned_to']], width='stretch', hide_index=True, on_select="rerun", selection_mode="single-row", key=f"g_{st.session_state.grid_nonce}")
 
                 if sel and len(sel.selection.rows) > 0:
-                    t = df.iloc[list(sel.selection.rows)[0]]
-                    st.markdown(f"### 🔎 Édition Ticket #{t['id']}")
-                    # FIX #1 & #2 : clé corrigée (edit_t_ → edit_title_) + widgets manquants ajoutés
+                    t = f_data[list(sel.selection.rows)[0]]; tid = t['id']
+                    st.markdown(f"### 🔎 Édition Ticket #{tid}")
                     with st.container(border=True):
-                        col_a, col_b = st.columns(2)
-                        STATUS_OPTS = ["Nouveau", "À faire", "En cours", "Terminé"]
-                        PRIORITY_OPTS = ["Basse", "Moyenne", "Haute", "Critique"]
-                        col_a.text_input("Titre", value=t.get('title', ''), key=f"edit_title_{t['id']}")
-                        try:
-                            status_idx = STATUS_OPTS.index(t.get('status', 'Nouveau'))
-                        except ValueError:
-                            status_idx = 0
-                        col_b.selectbox("Statut", STATUS_OPTS, index=status_idx, key=f"edit_status_{t['id']}")
-                        col_c, col_d = st.columns(2)
-                        try:
-                            priority_idx = PRIORITY_OPTS.index(t.get('priority', 'Moyenne'))
-                        except ValueError:
-                            priority_idx = 1
-                        col_c.selectbox("Priorité", PRIORITY_OPTS, index=priority_idx, key=f"edit_priority_{t['id']}")
-                        try:
-                            assign_idx = st.session_state['support_groups'].index(t.get('assigned_to', ''))
-                        except (ValueError, KeyError):
-                            assign_idx = 0
-                        col_d.selectbox("Assigné à", st.session_state['support_groups'], index=assign_idx, key=f"edit_assign_{t['id']}")
-                        st.text_area("Description", value=t.get('description', ''), key=f"edit_desc_{t['id']}")
-                        st.button("💾 ENREGISTRER", type="primary", on_click=cb_update_task_dashboard, args=(t['id'],))
-            else:
-                st.info("Aucun ticket.")
-    except requests.exceptions.RequestException as e:  # FIX OBS #3 : except typé
-        st.error(f"❌ Connexion API impossible : {e}")
+                        c1, c2 = st.columns(2)
+                        st_list = ["Nouveau", "À faire", "En cours", "Terminé"]
+                        c1.text_input("Titre", value=t['title'], key=f"edit_t_{tid}")
+                        c1.selectbox("Statut", st_list, index=st_list.index(normalize_status(t['status'])), key=f"edit_s_{tid}")
+                        c2.selectbox("Priorité", ["Basse", "Moyenne", "Haute", "Critique"], index=["Basse", "Moyenne", "Haute", "Critique"].index(t['priority']), key=f"edit_p_{tid}")
+                        c2.selectbox("Groupe", st.session_state["support_groups"], index=st.session_state["support_groups"].index(t['assigned_to']) if t['assigned_to'] in st.session_state["support_groups"] else 0, key=f"edit_a_{tid}")
+                        st.text_area("Description", value=t.get('description', ""), key=f"edit_d_{tid}")
+                        colb1, colb2 = st.columns([1, 4])
+                        colb1.button("💾 SAUVEGARDER", type="secondary", on_click=cb_update_task, args=(tid,))
+                        if st.session_state.authenticated:
+                            colb2.button("🗑️ SUPPRIMER", type="secondary", on_click=cb_delete_task, args=(tid,))
+            else: st.info("Aucun ticket.")
+    except: st.error("API déconnectée.")
+
+# --- TAB 3 : BASE DE DONNÉES ---
+with tabs[2]:
+    if st.session_state.authenticated:
+        st.header("🗄️ Groupes de Support")
+        with st.container(border=True):
+            cin, cbt = st.columns([3, 1])
+            cin.text_input("Nouveau groupe", key="new_group_name")
+            cbt.button("AJOUTER", on_click=lambda: cb_group_action("add", name=st.session_state.new_group_name), type="secondary")
+        
+        try:
+            grs = requests.get(f"{API_URL}/groups/").json()
+            if grs:
+                st.dataframe(pd.DataFrame(grs)[['id', 'name']], width='stretch', hide_index=True)
+                g_del = st.selectbox("Supprimer un groupe", options=grs, format_func=lambda x: x['name'])
+                st.button("SUPPRIMER SÉLECTION", on_click=lambda: cb_group_action("del", gid=g_del['id']), type="secondary")
+        except: pass
+    else: st.warning("🔐 Accès Admin requis")
+
+# --- TAB 4 : ADMIN TOOLS ---
+with tabs[3]:
+    if st.session_state.authenticated:
+        st.header("🛠️ Maintenance")
+        with st.container(border=True):
+            st.subheader("📜 Logs d'Audit")
+            try:
+                logs = requests.get(f"{API_URL}/audit/logs").json()
+                if logs: st.dataframe(pd.DataFrame(logs).sort_values('id', ascending=False), width='stretch', hide_index=True)
+            except: st.error("Erreur Logs")
+        
+        if st.button("💾 GÉNÉRER BACKUP DB", type="secondary"):
+            try:
+                b = requests.get(f"{API_URL}/backup")
+                st.download_button("📥 TÉLÉCHARGER", b.content, "backup.db", type="secondary")
+            except: st.error("Erreur Backup")
+    else: st.warning("🔐 Accès Admin requis")
+
+# --- TAB 2 : FLOW DESIGNER ---
+with tabs[1]:
+    if st.session_state.authenticated: show_flow_designer(API_URL, WORKFLOWS_FILE, st.session_state["support_groups"])
+    else: st.warning("🔐 Accès Admin requis")
