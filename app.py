@@ -253,3 +253,80 @@ with tabs[2]:
         st.header("🗄️ Base de données")
         r_g = requests.get(f"{API_URL}/groups/")
         if r_g.status_code == 200: st.dataframe(pd.DataFrame(r_g.json()), width='stretch', hide_index=True)
+    else: st.warning("🔐 Accès Admin requis.")
+
+# --- TAB 4: ADMIN TOOLS ---
+with tabs[3]:
+    if not st.session_state.authenticated:
+        st.warning("🔐 Accès Admin requis.")
+    else:
+        st.header("🛠️ Administration & Maintenance")
+
+        # ── Section 1 : Logs d'Audit ──────────────────────────────────────
+        st.subheader("📋 Logs d'Audit")
+        with st.container(border=True):
+            try:
+                r_logs = requests.get(f"{API_URL}/audit/logs", timeout=5)
+                if r_logs.status_code == 200:
+                    logs_data = r_logs.json()
+                    if logs_data:
+                        df_logs = pd.DataFrame(logs_data[:100])
+                        # Format timestamp column if present
+                        if 'timestamp' in df_logs.columns:
+                            df_logs['timestamp'] = pd.to_datetime(df_logs['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        # Reorder columns for readability
+                        cols_order = [c for c in ['id', 'timestamp', 'task_id', 'message'] if c in df_logs.columns]
+                        st.dataframe(df_logs[cols_order], use_container_width=True, hide_index=True)
+                        st.caption(f"📊 {len(logs_data)} entrée(s) au total — affichage des 100 dernières.")
+                    else:
+                        st.info("Aucun log d'audit enregistré.")
+                else:
+                    st.error(f"Erreur API : HTTP {r_logs.status_code}")
+            except Exception as e:
+                st.error(f"Impossible de contacter l'API : {e}")
+
+        st.write("")  # Spacer
+
+        # ── Section 2 : Sauvegarde de la base de données ─────────────────
+        st.subheader("💾 Sauvegarde")
+        with st.container(border=True):
+            st.markdown("Génère une copie horodatée du fichier `workflow.db` et propose son téléchargement.")
+            if st.button("⬇️ Générer une sauvegarde"):
+                try:
+                    r_backup = requests.get(f"{API_URL}/backup", timeout=15)
+                    if r_backup.status_code == 200:
+                        # Determine filename from Content-Disposition header or default
+                        cd = r_backup.headers.get("content-disposition", "")
+                        fname = "workflow_backup.db"
+                        if "filename=" in cd:
+                            fname = cd.split("filename=")[-1].strip().strip('"')
+                        st.download_button(
+                            label=f"📥 Télécharger {fname}",
+                            data=r_backup.content,
+                            file_name=fname,
+                            mime="application/octet-stream"
+                        )
+                        st.success(f"✅ Sauvegarde prête : `{fname}`")
+                    else:
+                        st.error(f"Erreur lors de la sauvegarde : HTTP {r_backup.status_code}")
+                except Exception as e:
+                    st.error(f"Impossible de contacter l'API : {e}")
+
+        st.write("")  # Spacer
+
+        # ── Section 3 : Vérification de l'intégrité des règles ───────────
+        st.subheader("🔍 Intégrité des règles Workflow")
+        with st.container(border=True):
+            st.markdown("Analyse le fichier `workflows.yaml` et signale les règles mal configurées.")
+            if st.button("🛡️ Vérifier l'intégrité"):
+                try:
+                    from engine import check_rules_integrity
+                    alerts = check_rules_integrity()
+                    if alerts:
+                        st.warning(f"⚠️ {len(alerts)} problème(s) détecté(s) :")
+                        for alert in alerts:
+                            st.error(alert)
+                    else:
+                        st.success("✅ Toutes les règles sont valides et bien configurées.")
+                except Exception as e:
+                    st.error(f"Erreur lors de la vérification : {e}")
