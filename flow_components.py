@@ -123,7 +123,7 @@ def on_action_label_change(row_id):
     for row in st.session_state.buf_fields:
         if row['id'] == row_id:
             # Récupérer la nouvelle valeur depuis le widget
-            new_label = st.session_state.get(f"lbl_{row_id}")
+            new_label = st.session_state.get(f"rule_step_lbl_{row_id}")
             row['label'] = new_label
             
             # Reset smart de la valeur
@@ -139,7 +139,7 @@ def on_action_label_change(row_id):
                 row['value'] = ""
             
             # Update le widget value pour reflet immédiat
-            st.session_state[f"val_{row_id}"] = row['value']
+            st.session_state[f"rule_step_val_{row_id}"] = row['value']
             break
 
 def cb_submit_step():
@@ -149,8 +149,8 @@ def cb_submit_step():
     # Récupération des valeurs depuis les widgets via session_state
     for row in st.session_state.buf_fields:
         rid = row['id']
-        label = st.session_state.get(f"lbl_{rid}", row['label'])
-        val = st.session_state.get(f"val_{rid}", row['value'])
+        label = st.session_state.get(f"rule_step_lbl_{rid}", row['label'])
+        val = st.session_state.get(f"rule_step_val_{rid}", row['value'])
         
         tech_key = DISPLAY_TO_TECH.get(label, label)
         
@@ -319,16 +319,16 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
                 st.markdown(f"<p style='margin:4px 0 0 0; font-size:13px;'>⚡ Si : {trigger_summary}</p>", unsafe_allow_html=True)
 
             # Boutons d'action
-            c2.button("✏️", key=f"edit_{i}", on_click=cb_load_rule, args=(i, current_rules), help="Modifier la règle")
+            c2.button("✏️", key=f"edit_rule_{i}", on_click=cb_load_rule, args=(i, current_rules), help="Modifier la règle")
             
             # Logique de suppression avec confirmation
             if st.session_state.delete_confirm_idx == i:
                 st.warning("Supprimer définitivement ?")
                 col_yes, col_no = st.columns(2)
-                col_yes.button("OUI", key=f"conf_{i}", on_click=cb_delete_rule, args=(i, workflows_file, api_url), type="primary")
-                col_no.button("NON", key=f"no_{i}", on_click=lambda: st.session_state.update(delete_confirm_idx=-1))
+                col_yes.button("OUI", key=f"conf_del_rule_{i}", on_click=cb_delete_rule, args=(i, workflows_file, api_url), type="primary")
+                col_no.button("NON", key=f"no_rule_{i}", on_click=lambda: st.session_state.update(delete_confirm_idx=-1))
             else:
-                c3.button("🗑️", key=f"del_{i}", on_click=lambda x=i: st.session_state.update(delete_confirm_idx=x), help="Supprimer la règle")
+                c3.button("🗑️", key=f"del_rule_{i}", on_click=lambda x=i: st.session_state.update(delete_confirm_idx=x), help="Supprimer la règle")
             
             st.divider()
 
@@ -361,7 +361,7 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
         # Selectbox Champ (Trigger)
         # Note: on utilise st.session_state.current_triggers[i]['field'] via le key implicite si on veut
         # Mais ici on gère manuellement pour l'exclusion complexe
-        new_field = c1.selectbox(f"Champ #{i+1}", valid_fields, index=valid_fields.index(curr_field), key=f"trig_f_{i}")
+        new_field = c1.selectbox(f"Champ #{i+1}", valid_fields, index=valid_fields.index(curr_field), key=f"rule_trig_f_{i}")
         
         if new_field != trig['field']:
             trig['field'] = new_field
@@ -372,40 +372,40 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
 
         if new_field == "Statut":
              trig['operator'] = "Est parmi" # Force l'opérateur
-             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"trig_o_{i}")
+             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"rule_trig_o_{i}")
              
              # Conversion valeur actuelle en liste si nécessaire
              current_val = trig['value']
              if not isinstance(current_val, list):
                  current_val = [current_val] if current_val and current_val in STATUS_OPTIONS else []
                  
-             trig['value'] = c3.multiselect("Valeur", STATUS_OPTIONS, default=current_val, key=f"trig_v_{i}")
+             trig['value'] = c3.multiselect("Valeur", STATUS_OPTIONS, default=current_val, key=f"rule_trig_v_{i}")
 
         elif new_field == "Priorité":
              trig['operator'] = "Est parmi" # Force l'opérateur
-             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"trig_o_{i}")
+             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"rule_trig_o_{i}")
              
              # Conversion valeur actuelle en liste si nécessaire
              current_val = trig['value']
              if not isinstance(current_val, list):
                  current_val = [current_val] if current_val and current_val in PRIORITY_OPTIONS else []
 
-             trig['value'] = c3.multiselect("Valeur", PRIORITY_OPTIONS, default=current_val, key=f"trig_v_{i}")
+             trig['value'] = c3.multiselect("Valeur", PRIORITY_OPTIONS, default=current_val, key=f"rule_trig_v_{i}")
 
         elif new_field == "Assigné à":
-            trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"trig_o_{i}")
+            trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"rule_trig_o_{i}")
             if trig['operator'] == "Est égal à":
                 # Mode strict avec Selectbox
                 try: idx_v = support_groups.index(trig['value'])
                 except: idx_v = 0
-                trig['value'] = c3.selectbox("Valeur", support_groups, index=idx_v, key=f"trig_v_{i}")
+                trig['value'] = c3.selectbox("Valeur", support_groups, index=idx_v, key=f"rule_trig_v_{i}")
             else:
                 # Mode libre (pour 'Contient', 'Commence par'...)
-                trig['value'] = c3.text_input("Valeur", value=trig['value'], key=f"trig_v_{i}")
+                trig['value'] = c3.text_input("Valeur", value=trig['value'], key=f"rule_trig_v_{i}")
         else:
             # Cas général (Titre, Description...)
-            trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"trig_o_{i}")
-            trig['value'] = c3.text_input("Valeur", value=trig['value'], key=f"trig_v_{i}")
+            trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"rule_trig_o_{i}")
+            trig['value'] = c3.text_input("Valeur", value=trig['value'], key=f"rule_trig_v_{i}")
 
 
     if len(st.session_state.current_triggers) < 3:
@@ -515,8 +515,8 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
             with st.container(border=True):
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(f"**{idx+1}. {icon} {act}**<br/><div style='margin-top:6px;'>{desc_html}</div>", unsafe_allow_html=True)
-                c2.button("✏️", key=f"ed_st_{idx}", on_click=cb_load_step_for_edit, args=(idx,))
-                c2.button("🗑️", key=f"del_st_{idx}", on_click=lambda x=idx: st.session_state.temp_steps.pop(x))
+                c2.button("✏️", key=f"rule_edit_step_{idx}", on_click=cb_load_step_for_edit, args=(idx,))
+                c2.button("🗑️", key=f"rule_del_step_{idx}", on_click=lambda x=idx: st.session_state.temp_steps.pop(x))
     
     st.divider()
     st.button("💾 ENREGISTRER LA REGLE", type="primary", use_container_width=True, on_click=cb_save_global_rule, args=(workflows_file, api_url, current_rules))

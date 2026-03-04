@@ -41,6 +41,16 @@ class Task(TaskBase):
     classification_name: Optional[str] = None
     class Config: from_attributes = True
 
+class ClassificationCreate(BaseModel):
+    name: str
+
+class ClassificationUpdate(BaseModel):
+    name: Optional[str] = None
+
+class Classification(ClassificationCreate):
+    id: int
+    class Config: from_attributes = True
+
 class GroupCreate(BaseModel):
     name: str
     classification_ids: List[int]
@@ -57,10 +67,41 @@ class SupportGroup(BaseModel):
 
 class AuditLogCreate(BaseModel):
     message: str
+class UserBase(BaseModel):
+    first_name: str
+    last_name: str
+    address: str
 
-class ClassificationCreate(BaseModel):
+class UserCreate(UserBase):
+    group_ids: List[int]
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+    group_ids: Optional[List[int]] = None
+
+class User(UserBase):
+    id: int
+    user_code: str
+    groups: List[SupportGroup] = []
+    class Config: from_attributes = True
+
+class LocationBase(BaseModel):
     name: str
+    address: str
+    zip_code: str
+    city: str
 
-class Classification(ClassificationCreate):
+class LocationCreate(LocationBase):
+    pass
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    zip_code: Optional[str] = None
+    city: Optional[str] = None
+
+class Location(LocationBase):
     id: int
     class Config: from_attributes = True

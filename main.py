@@ -111,7 +111,7 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 
 @app.get("/groups/", response_model=List[schemas.SupportGroup])
 def read_groups(db: Session = Depends(get_db)):
-    return db.query(models.SupportGroup).order_by(models.SupportGroup.name).all()
+    return db.query(models.SupportGroup).options(joinedload(models.SupportGroup.classifications)).order_by(models.SupportGroup.name).all()
 
 @app.post("/groups/", response_model=schemas.SupportGroup)
 def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db)):
@@ -182,6 +182,46 @@ def create_classification(classif: schemas.ClassificationCreate, db: Session = D
     db.refresh(db_classif)
     return db_classif
 
+@app.put("/classifications/{classif_id}")
+def update_classification(classif_id: int, classif_update: schemas.ClassificationUpdate, db: Session = Depends(get_db)):
+    db_classif = db.query(models.TaskClassification).filter(models.TaskClassification.id == classif_id).first()
+    if not db_classif:
+        raise HTTPException(status_code=404, detail="Classification not found")
+    
+    if classif_update.name is not None:
+        # Check for duplicate names
+        dup = db.query(models.TaskClassification).filter(
+            models.TaskClassification.name == classif_update.name,
+            models.TaskClassification.id != classif_id
+        ).first()
+        if dup:
+            raise HTTPException(status_code=400, detail="Ce nom de nature existe déjà.")
+        
+        db_classif.name = classif_update.name
+    
+    db.commit()
+    db.refresh(db_classif)
+    print(f"[API] Nature ID {classif_id} renommée en {db_classif.name}")
+    return db_classif
+
+@app.delete("/classifications/{classif_id}")
+def delete_classification(classif_id: int, db: Session = Depends(get_db)):
+    db_classif = db.query(models.TaskClassification).filter(models.TaskClassification.id == classif_id).first()
+    if not db_classif:
+        return {"message": "Success (idempotent)"}
+    
+    # Check for linked tasks
+    linked_tasks = db.query(models.Task).filter(models.Task.classification_id == classif_id).count()
+    if linked_tasks > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Incapable de supprimer : des tickets sont encore liés à cette nature."
+        )
+    
+    db.delete(db_classif)
+    db.commit()
+    return {"message": "Classification deleted"}
+
 # -----------------------------------------------------------------------------
 # ROUTES DES ASSETS (CMDB)
 # -----------------------------------------------------------------------------
@@ -228,6 +268,86 @@ def create_manual_log(log: schemas.AuditLogCreate, db: Session = Depends(get_db)
     db.commit()
     return {"status": "ok"}
 
+# -----------------------------------------------------------------------------
+# ROUTES DES UTILISATEURS
+# -----------------------------------------------------------------------------
+
+def generate_user_code(db: Session):
+    last_user = db.query(models.User).order_by(models.User.user_code.desc()).first()
+    if not last_user:
+        return "A001"
+    
+    code = last_user.user_code
+    letter = code[0]
+    try:
+        num = int(code[1:])
+    except:
+        num = 0
+    
+    if num >= 999:
+        new_letter = chr(ord(letter) + 1) if letter != 'Z' else 'A'
+        new_num = 1
+    else:
+        new_letter = letter
+        new_num = num + 1
+        
+    return f"{new_letter}{new_num:03d}"
+
+@app.get("/users/", response_model=List[schemas.User])
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(models.User).options(joinedload(models.User.groups)).offset(skip).limit(limit).all()
+
+@app.post("/users/", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = models.User(
+        user_code=generate_user_code(db),
+        first_name=user.first_name,
+        last_name=user.last_name,
+        address=user.address
+    )
+    if user.group_ids:
+        groups = db.query(models.SupportGroup).filter(models.SupportGroup.id.in_(user.group_ids)).all()
+        db_user.groups = groups
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.get("/users/{user_id}", response_model=schemas.User)
+def read_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+@app.put("/users/{user_id}", response_model=schemas.User)
+def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = user_update.model_dump(exclude_unset=True)
+    if "group_ids" in update_data:
+        group_ids = update_data.pop("group_ids")
+        groups = db.query(models.SupportGroup).filter(models.SupportGroup.id.in_(group_ids)).all()
+        db_user.groups = groups
+    
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+        
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(db_user)
+    db.commit()
+    return {"status": "ok"}
+
 @app.get("/backup")
 def get_backup():
     import os
@@ -235,3 +355,51 @@ def get_backup():
     if os.path.exists("workflow.db"):
         return FileResponse("workflow.db", filename="liteflow_backup.db")
     raise HTTPException(status_code=404)
+
+# -----------------------------------------------------------------------------
+# ROUTES DES LOCALISATIONS
+# -----------------------------------------------------------------------------
+
+@app.get("/locations/", response_model=List[schemas.Location])
+def read_locations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(models.Location).offset(skip).limit(limit).all()
+
+@app.post("/locations/", response_model=schemas.Location)
+def create_location(location: schemas.LocationCreate, db: Session = Depends(get_db)):
+    db_loc = models.Location(**location.model_dump())
+    db.add(db_loc)
+    try:
+        db.commit()
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Location name already exists")
+    db.refresh(db_loc)
+    return db_loc
+
+@app.put("/locations/{location_id}", response_model=schemas.Location)
+def update_location(location_id: int, loc_update: schemas.LocationUpdate, db: Session = Depends(get_db)):
+    db_loc = db.query(models.Location).filter(models.Location.id == location_id).first()
+    if not db_loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+    
+    update_data = loc_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_loc, key, value)
+    
+    try:
+        db.commit()
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Name already exists or invalid data")
+        
+    db.refresh(db_loc)
+    return db_loc
+
+@app.delete("/locations/{location_id}")
+def delete_location(location_id: int, db: Session = Depends(get_db)):
+    db_loc = db.query(models.Location).filter(models.Location.id == location_id).first()
+    if not db_loc:
+        return {"status": "ok (idempotent)"}
+    db.delete(db_loc)
+    db.commit()
+    return {"status": "deleted"}

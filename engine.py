@@ -211,7 +211,22 @@ def process_workflow(task_id, db: Session):
                         create_data[tk] = v
                     
                     try:
-                        print(f"[ENGINE] Création sous-tâche avec héritage de la nature ID : {task.classification_id}")
+                        # 1. Héritage de la Nature du Filtre parent
+                        target_classif_id = getattr(task, 'classification_id', None)
+                        
+                        # 2. Sécurité : Recherche de la nature 'Demandes' par défaut si nécessaire
+                        if not target_classif_id:
+                            from models import TaskClassification
+                            default_nat = db.query(TaskClassification).filter(TaskClassification.name == "Demandes").first()
+                            if default_nat:
+                                target_classif_id = default_nat.id
+                                print(f"[ENGINE] [SÉCURITÉ] Nature manquante sur parent #{task.id}, repli sur 'Demandes' (ID: {target_classif_id})")
+                        
+                        if not target_classif_id:
+                            print(f"[ENGINE] [ERREUR CRITIQUE] Aucune nature disponible pour la création de sous-tâche pour #{task.id}")
+                            continue
+
+                        print(f"[ENGINE] Création sous-tâche (Parent #{task.id}) avec Nature ID : {target_classif_id}")
                         new_task = Task(
                             title=create_data.get('title', 'Sous-tâche'),
                             description=create_data.get('description', ''),
@@ -219,10 +234,10 @@ def process_workflow(task_id, db: Session):
                             status=create_data.get('status', 'Nouveau'),
                             priority=create_data.get('priority', 'Moyenne'),
                             assigned_to=create_data.get('assigned_to'),
-                            classification_id=task.classification_id
+                            classification_id=target_classif_id
                         )
                         db.add(new_task)
-                        db.add(AuditLog(message=f"[WORKFLOW] Sous-tâche créée pour le parent #{task_id}"))
+                        db.add(AuditLog(message=f"[WORKFLOW] Sous-tâche créée pour le parent #{task_id} (Nature héritée)"))
                         print(f"[ENGINE] CREATE sous-tâche '{new_task.title}' [OK]")
                         changes_made = True
                     except Exception as e:

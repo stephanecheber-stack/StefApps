@@ -18,8 +18,9 @@
       title: Changer le mot de passe serveur ITSM1
   triggers:
   - field: Priorité
-    operator: Est égal à
-    value: Critique
+    operator: Est parmi
+    value:
+    - Critique
   - field: Titre
     operator: Contient
     value: ITSM

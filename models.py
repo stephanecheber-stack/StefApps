@@ -11,6 +11,22 @@ group_classification_link = Table(
     Column("classification_id", Integer, ForeignKey("classifications.id"), primary_key=True)
 )
 
+user_group_link = Table(
+    "user_group_link",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("group_id", Integer, ForeignKey("groups.id"), primary_key=True)
+)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    user_code = Column(String, unique=True, index=True) # A001 format
+    first_name = Column(String)
+    last_name = Column(String)
+    address = Column(String)
+    groups = relationship("SupportGroup", secondary=user_group_link, backref="users")
+
 class SupportGroup(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True, index=True)
@@ -55,3 +71,11 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     message = Column(String)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+
+class Location(Base):
+    __tablename__ = "locations"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True) # Site or building name
+    address = Column(String)
+    zip_code = Column(String)
+    city = Column(String)
