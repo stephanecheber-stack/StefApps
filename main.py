@@ -295,7 +295,10 @@ def generate_user_code(db: Session):
 
 @app.get("/users/", response_model=List[schemas.User])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.User).options(joinedload(models.User.groups)).offset(skip).limit(limit).all()
+    return db.query(models.User).options(
+        joinedload(models.User.groups),
+        joinedload(models.User.location)
+    ).offset(skip).limit(limit).all()
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -303,7 +306,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         user_code=generate_user_code(db),
         first_name=user.first_name,
         last_name=user.last_name,
-        address=user.address
+        location_id=user.location_id
     )
     if user.group_ids:
         groups = db.query(models.SupportGroup).filter(models.SupportGroup.id.in_(user.group_ids)).all()
@@ -315,7 +318,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @app.get("/users/{user_id}", response_model=schemas.User)
 def read_user(user_id: int, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    db_user = db.query(models.User).options(
+        joinedload(models.User.groups),
+        joinedload(models.User.location)
+    ).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
@@ -331,6 +337,9 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
         group_ids = update_data.pop("group_ids")
         groups = db.query(models.SupportGroup).filter(models.SupportGroup.id.in_(group_ids)).all()
         db_user.groups = groups
+    
+    if "location_id" in update_data:
+        db_user.location_id = update_data.pop("location_id")
     
     for key, value in update_data.items():
         setattr(db_user, key, value)
@@ -362,7 +371,7 @@ def get_backup():
 
 @app.get("/locations/", response_model=List[schemas.Location])
 def read_locations(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.Location).offset(skip).limit(limit).all()
+    return db.query(models.Location).options(joinedload(models.Location.users)).offset(skip).limit(limit).all()
 
 @app.post("/locations/", response_model=schemas.Location)
 def create_location(location: schemas.LocationCreate, db: Session = Depends(get_db)):
@@ -400,6 +409,11 @@ def delete_location(location_id: int, db: Session = Depends(get_db)):
     db_loc = db.query(models.Location).filter(models.Location.id == location_id).first()
     if not db_loc:
         return {"status": "ok (idempotent)"}
+        
+    # Detach users from this location before deleting it
+    for user in db_loc.users:
+        user.location_id = None
+        
     db.delete(db_loc)
     db.commit()
     return {"status": "deleted"}

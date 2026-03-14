@@ -19,7 +19,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "IMPOSSIBLE_PASSWORD_SEQUENCE_XYZ")
 # LOGIQUE DE DONNÉES
 # -----------------------------------------------------------------------------
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_data(endpoint):
     try:
         resp = requests.get(f"{API_URL}/{endpoint}/", timeout=5)
@@ -71,6 +71,7 @@ def cb_create_task():
             st.session_state.create_desc = ""
             st.session_state.create_priority = "Moyenne"
             st.session_state.create_assigned = st.session_state["non_assigne"]
+            st.cache_data.clear()
     except: st.error("Erreur API")
 
 def cb_update_task(tid):
@@ -85,6 +86,7 @@ def cb_update_task(tid):
     try:
         if requests.put(f"{API_URL}/tasks/{tid}", json=payload).status_code == 200:
             st.toast("✅ Modifications enregistrées")
+            st.cache_data.clear()
     except: st.error("Erreur")
 
 def cb_delete_task(tid):
@@ -92,6 +94,7 @@ def cb_delete_task(tid):
         if requests.delete(f"{API_URL}/tasks/{tid}").status_code == 200:
             st.session_state.grid_nonce += 1
             st.toast("🗑️ Ticket supprimé")
+            st.cache_data.clear()
     except: st.error("Erreur")
 
 def cb_group_action(action, name=None, gid=None, classification_ids=None):
@@ -103,13 +106,16 @@ def cb_group_action(action, name=None, gid=None, classification_ids=None):
                 # Reset des champs de création
                 st.session_state.new_group_name = ""
                 st.session_state.new_group_nats = []
+                st.cache_data.clear()
         elif action == "update":
             payload = {"name": name, "classification_ids": classification_ids}
             if requests.put(f"{API_URL}/groups/{gid}", json=payload).status_code == 200:
                 st.toast(f"✅ Groupe {name} mis à jour")
+                st.cache_data.clear()
         elif action == "del":
             if requests.delete(f"{API_URL}/groups/{gid}").status_code == 200:
                 st.toast("🗑️ Groupe supprimé")
+                st.cache_data.clear()
     except: st.error("Erreur API")
 
 def cb_nature_action(action, name=None, nid=None):
@@ -119,10 +125,12 @@ def cb_nature_action(action, name=None, nid=None):
             if requests.post(f"{API_URL}/classifications/", json=payload).status_code == 200:
                 st.toast(f"✅ Nature '{name}' ajoutée")
                 st.session_state.new_nature_name = ""
+                st.cache_data.clear()
         elif action == "del":
             resp = requests.delete(f"{API_URL}/classifications/{nid}")
             if resp.status_code == 200:
                 st.toast("🗑️ Nature supprimée")
+                st.cache_data.clear()
             else:
                 try:
                     detail = resp.json().get('detail', "Erreur")
@@ -146,6 +154,7 @@ def cb_update_nature(nid, old_name, new_name):
             # Force la mise à jour immédiate pour le selectbox
             st.session_state[f"edit_classif_name_{nid}"] = ""
             st.toast("✅ Nature mise à jour")
+            st.cache_data.clear()
         else:
             try:
                 detail = resp.json().get('detail', "Erreur")
@@ -167,16 +176,19 @@ def cb_user_action(action, uid=None, data=None):
                 st.session_state.new_user_lname = ""
                 st.session_state.new_user_addr = ""
                 st.session_state.new_user_groups = []
+                st.cache_data.clear()
         elif action == "update":
             resp = requests.put(f"{API_URL}/users/{uid}", json=data)
             if resp.status_code == 200:
                 st.toast("✅ Utilisateur mis à jour")
                 requests.post(f"{API_URL}/audit/logs", json={"message": f"[ADMIN] Utilisateur ID {uid} modifié"})
+                st.cache_data.clear()
         elif action == "del":
             resp = requests.delete(f"{API_URL}/users/{uid}")
             if resp.status_code == 200:
                 st.toast("🗑️ Utilisateur supprimé")
                 requests.post(f"{API_URL}/audit/logs", json={"message": f"[ADMIN] Utilisateur ID {uid} supprimé"})
+                st.cache_data.clear()
     except Exception as e: st.error(f"Erreur User Action: {e}")
 
 def cb_location_action(action, loc_id=None, data=None):
@@ -245,34 +257,59 @@ init_state()
 
 st.markdown("""
 <style>
-    .stApp { background-color: #f1f5f9; }
-    section[data-testid="stSidebar"] { background-color: #0f172a !important; }
-    section[data-testid="stSidebar"] label, .sidebar-header { color: white !important; font-weight: 800 !important; }
-    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Fira Sans', sans-serif !important;
+        color: #1E293B !important;
+    }
+    
+    .stApp { background-color: #F8FAFC !important; }
+    
+    section[data-testid="stSidebar"] { background-color: #1E293B !important; }
+    section[data-testid="stSidebar"] label, .sidebar-header, section[data-testid="stSidebar"] p { color: #F8FAFC !important; font-weight: 500 !important; }
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 { color: #F8FAFC !important; }
+
+    h1, h2, h3, h4 { color: #1E293B !important; font-family: 'Fira Code', monospace !important; font-weight: 700 !important; }
 
     /* BOUTONS SECONDAIRES (Bleu SaaS) */
     button[data-testid="stBaseButton-secondary"] {
-        background-color: #2563eb !important;
+        background-color: #3B82F6 !important;
         color: white !important;
         border: none !important;
-        font-weight: 700 !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer !important;
+    }
+    button[data-testid="stBaseButton-secondary"]:hover {
+        background-color: #2563EB !important;
     }
 
-    /* BOUTONS PRIMAIRES (Vert Foncé) */
+    /* BOUTONS PRIMAIRES (CTA) */
     button[data-testid="stBaseButton-primary"] {
-        background-color: #064e3b !important;
-        color: white !important;
-        border: 2px solid #10b981 !important;
-        font-weight: 800 !important;
+        background-color: #F97316 !important;
+        color: #F8FAFC !important;
+        border: none !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer !important;
+    }
+    button[data-testid="stBaseButton-primary"]:hover {
+        background-color: #EA580C !important;
     }
 
-    [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; }
+    [data-testid="stVerticalBlockBorderWrapper"] { background-color: #FFFFFF !important; border: 1px solid #E2E8F0 !important; border-radius: 8px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 
     /* BOUTONS ROUGES (SUPPRESSION) */
-    button[data-testid="stBaseButton-secondary"].red-btn {
+    div.red-btn button[data-testid="stBaseButton-secondary"] {
         background-color: #dc2626 !important;
         color: white !important;
         border: none !important;
+    }
+    div.red-btn button[data-testid="stBaseButton-secondary"]:hover {
+        background-color: #b91c1c !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -569,34 +606,45 @@ with tabs[2]:
             except Exception as e: st.error(f"Erreur : {e}")
 
         elif target == "Utilisateurs":
-            # 1. FORMULAIRE DE CRÉATION
+            # 1. FORMULAIRE DE CRÉATION OPTIMISÉ (st.form)
             with st.container(border=True):
                 st.subheader("➕ Ajouter un Utilisateur")
-                c1, c2 = st.columns(2)
-                fname = c1.text_input("Prénom", key="new_user_fname")
-                lname = c2.text_input("Nom", key="new_user_lname")
-                addr = st.text_input("Adresse", key="new_user_addr")
-                
-                groups_options = st.session_state.get("support_groups", [])
-                if not groups_options:
-                    st.warning("⚠️ Aucun groupe détecté. Créez d'abord un groupe de support avant d'ajouter un utilisateur.")
-                
-                grps = st.multiselect("Groupes d'appartenance", 
-                                     options=groups_options, 
-                                     format_func=lambda x: x['name'], 
-                                     key="new_user_groups")
-                
-                can_add = bool(fname.strip()) and bool(lname.strip())
-                st.button("AJOUTER L'UTILISATEUR", 
-                          on_click=cb_user_action, 
-                          args=("add", None, {
-                              "first_name": fname,
-                              "last_name": lname,
-                              "address": addr,
-                              "group_ids": [g['id'] for g in grps]
-                          }),
-                          disabled=not can_add,
-                          type="secondary", use_container_width=True)
+                with st.form("form_create_user", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    fname = c1.text_input("Prénom", key="new_user_fname")
+                    lname = c2.text_input("Nom", key="new_user_lname")
+                    
+                    # Remplacement de l'adresse par la localisation
+                    locs_options = [{"id": None, "name": "Non localisé", "city": ""}] + st.session_state.get("locations", [])
+                    selected_loc = st.selectbox(
+                        "Site de rattachement", 
+                        options=locs_options, 
+                        format_func=lambda x: f"{x['name']} {f'({x['city']})' if x.get('city') else ''}".strip(),
+                        key="new_user_loc"
+                    )
+                    
+                    groups_options = st.session_state.get("support_groups", [])
+                    if not groups_options:
+                        st.warning("⚠️ Aucun groupe détecté.")
+                    
+                    grps = st.multiselect("Groupes d'appartenance", 
+                                         options=groups_options, 
+                                         format_func=lambda x: x['name'], 
+                                         key="new_user_groups")
+                    
+                    submitted = st.form_submit_button("AJOUTER L'UTILISATEUR", type="secondary", use_container_width=True)
+                    if submitted:
+                        if not fname.strip() or not lname.strip():
+                            st.error("⚠️ Prénom et Nom sont obligatoires.")
+                        else:
+                            payload = {
+                                "first_name": fname,
+                                "last_name": lname,
+                                "location_id": selected_loc['id'] if selected_loc else None,
+                                "group_ids": [g['id'] for g in grps]
+                            }
+                            cb_user_action("add", data=payload)
+                            st.rerun()
 
             st.divider()
 
@@ -606,10 +654,11 @@ with tabs[2]:
                 if users:
                     df_u = pd.DataFrame(users)
                     df_u['Groupes'] = df_u['groups'].apply(lambda x: ", ".join([g['name'] for g in x]) if x else "")
+                    df_u['Site'] = df_u['location'].apply(lambda x: x['name'] if x else "N/A")
                     
                     st.subheader("📋 Liste des Utilisateurs")
-                    st.dataframe(df_u[['user_code', 'first_name', 'last_name', 'address', 'Groupes']], 
-                                 column_config={"user_code": "ID Métier", "address": "Adresse"},
+                    st.dataframe(df_u[['user_code', 'first_name', 'last_name', 'Site', 'Groupes']], 
+                                 column_config={"user_code": "ID Métier", "Site": "Localisation"},
                                  width='stretch', hide_index=True)
 
                     st.divider()
@@ -619,36 +668,45 @@ with tabs[2]:
                                              format_func=lambda x: f"{x['user_code']} - {x['first_name']} {x['last_name']}", 
                                              key="edit_user_sel")
                         if edit_u:
-                            c1, c2 = st.columns(2)
-                            u_fname = c1.text_input("Prénom", value=edit_u['first_name'], key=f"edit_u_fname_{edit_u['id']}")
-                            u_lname = c2.text_input("Nom", value=edit_u['last_name'], key=f"edit_u_lname_{edit_u['id']}")
-                            u_addr = st.text_input("Adresse", value=edit_u['address'], key=f"edit_u_addr_{edit_u['id']}")
-                            
-                            cur_grp_ids = [g['id'] for g in edit_u['groups']]
-                            def_grps = [g for g in st.session_state.support_groups if g['id'] in cur_grp_ids]
-                            u_grps = st.multiselect("Groupes", options=st.session_state.support_groups, 
-                                                   default=def_grps, format_func=lambda x: x['name'], 
-                                                   key=f"edit_u_grps_{edit_u['id']}")
-                            
-                            c_save, c_del, _ = st.columns([1, 1, 2])
-                            
-                            c_save.button("METTRE À JOUR", 
-                                         on_click=cb_user_action, 
-                                         args=("update", edit_u['id'], {
-                                             "first_name": u_fname,
-                                             "last_name": u_lname,
-                                             "address": u_addr,
-                                             "group_ids": [g['id'] for g in u_grps]
-                                         }),
-                                         disabled=len(u_grps) == 0,
-                                         type="secondary", use_container_width=True)
-                            
+                            with st.form(f"form_edit_user_{edit_u['id']}"):
+                                c1, c2 = st.columns(2)
+                                u_fname = c1.text_input("Prénom", value=edit_u['first_name'])
+                                u_lname = c2.text_input("Nom", value=edit_u['last_name'])
+                                
+                                # Localisation pour l'édition
+                                locs_options = [{"id": None, "name": "Non localisé", "city": ""}] + st.session_state.get("locations", [])
+                                current_loc_id = edit_u.get('location_id')
+                                try:
+                                    def_loc_idx = next(i for i, l in enumerate(locs_options) if l['id'] == current_loc_id)
+                                except: def_loc_idx = 0
+                                
+                                u_loc = st.selectbox(
+                                    "Site de rattachement", 
+                                    options=locs_options, 
+                                    index=def_loc_idx,
+                                    format_func=lambda x: f"{x['name']} {f'({x['city']})' if x.get('city') else ''}".strip()
+                                )
+                                
+                                cur_grp_ids = [g['id'] for g in edit_u['groups']]
+                                def_grps = [g for g in st.session_state.support_groups if g['id'] in cur_grp_ids]
+                                u_grps = st.multiselect("Groupes", options=st.session_state.support_groups, 
+                                                       default=def_grps, format_func=lambda x: x['name'])
+                                
+                                c_save, c_del, _ = st.columns([1, 1, 2])
+                                
+                                if c_save.form_submit_button("METTRE À JOUR", type="secondary", use_container_width=True):
+                                    cb_user_action("update", edit_u['id'], {
+                                        "first_name": u_fname,
+                                        "last_name": u_lname,
+                                        "location_id": u_loc['id'] if u_loc else None,
+                                        "group_ids": [g['id'] for g in u_grps]
+                                    })
+                                    st.rerun()
+                                
                             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-                            c_del.button("SUPPRIMER L'UTILISATEUR", 
-                                         on_click=cb_user_action, 
-                                         args=("del", edit_u['id']),
-                                         type="secondary", use_container_width=True,
-                                         key=f"btn_del_user_{edit_u['id']}")
+                            if st.button("SUPPRIMER L'UTILISATEUR", type="secondary", use_container_width=True, key=f"btn_del_user_{edit_u['id']}"):
+                                cb_user_action("del", edit_u['id'])
+                                st.rerun()
                             st.markdown('</div>', unsafe_allow_html=True)
             except Exception as e: st.error(f"Erreur Liste Users: {e}")
 
@@ -697,38 +755,56 @@ with tabs[2]:
                     with st.container(border=True):
                         edit_l = st.selectbox("Site à modifier", options=locs, format_func=lambda x: x['name'], key="edit_loc_sel")
                         if edit_l:
-                            c1, c2 = st.columns(2)
-                            l_name = c1.text_input("Nom", value=edit_l['name'], key=f"edit_loc_name_{edit_l['id']}")
-                            l_addr = c2.text_input("Adresse", value=edit_l['address'], key=f"edit_loc_addr_{edit_l['id']}")
-                            c3, c4 = st.columns(2)
-                            l_zip = c3.text_input("Code Postal", value=edit_l['zip_code'], key=f"edit_loc_zip_{edit_l['id']}")
-                            l_city = c4.text_input("Ville", value=edit_l['city'], key=f"edit_loc_city_{edit_l['id']}")
-                            
-                            c_save, c_del, _ = st.columns([1, 1, 2])
-                            
-                            c_save.button("METTRE À JOUR", 
-                                         on_click=cb_update_location, 
-                                         args=(edit_l['id'], edit_l['name'], {
-                                             "name": l_name,
-                                             "address": l_addr,
-                                             "zip_code": l_zip,
-                                             "city": l_city
-                                         }),
-                                         type="secondary", use_container_width=True,
-                                         key=f"btn_save_loc_{edit_l['id']}")
-                            
-                            # Logique de confirmation pour la suppression
+                            # 👤 Utilisateurs présents sur ce site
+                            # locs vient de st.session_state['locations'], qui a été fetché avec joinedload(models.Location.users)
+                            # On récupère l'objet location frais (car edit_l peut être décalé par rapport à l'API)
+                            # Mais locs est déjà là. Cherchons les users.
+                            site_users = edit_l.get('users', [])
+                            if site_users:
+                                st.markdown("###### 👤 Utilisateurs présents sur ce site")
+                                df_su = pd.DataFrame(site_users)
+                                st.dataframe(df_su[['user_code', 'first_name', 'last_name']], 
+                                             column_config={"user_code": "Code", "first_name": "Prénom", "last_name": "Nom"},
+                                             hide_index=True, width='stretch')
+                            else:
+                                st.info("ℹ️ Aucun utilisateur n'est actuellement rattaché à ce site.")
+
+                            st.divider()
+                            st.subheader("✏️ Édition des détails")
+                            with st.form(f"form_edit_loc_{edit_l['id']}"):
+                                c1, c2 = st.columns(2)
+                                l_name = c1.text_input("Nom", value=edit_l['name'])
+                                l_addr = c2.text_input("Adresse", value=edit_l['address'])
+                                c3, c4 = st.columns(2)
+                                l_zip = c3.text_input("Code Postal", value=edit_l['zip_code'])
+                                l_city = c4.text_input("Ville", value=edit_l['city'])
+                                
+                                c_save, c_del, _ = st.columns([1, 1, 2])
+                                
+                                if c_save.form_submit_button("METTRE À JOUR", type="secondary", use_container_width=True):
+                                    cb_update_location(edit_l['id'], edit_l['name'], {
+                                        "name": l_name,
+                                        "address": l_addr,
+                                        "zip_code": l_zip,
+                                        "city": l_city
+                                    })
+                                    st.rerun()
+                                
+                            # Logique de confirmation pour la suppression (hors form)
                             conf_key = f"conf_del_loc_{edit_l['id']}"
                             if st.session_state.get(conf_key):
                                 st.warning("Supprimer définitivement ce site ?")
                                 col_y, col_n = st.columns(2)
-                                col_y.button("OUI, SUPPRIMER", on_click=cb_location_action, args=("del", edit_l['id']), type="primary", use_container_width=True, key=f"key_yes_{edit_l['id']}")
-                                if col_n.button("ANNULER", key=f"key_no_{edit_l['id']}"):
+                                if col_y.button("OUI, SUPPRIMER", type="primary", use_container_width=True, key=f"key_yes_{edit_l['id']}"):
+                                    cb_location_action("del", edit_l['id'])
+                                    st.session_state[conf_key] = False
+                                    st.rerun()
+                                if col_n.button("ANNULER", key=f"key_no_{edit_l['id']}", use_container_width=True):
                                     st.session_state[conf_key] = False
                                     st.rerun()
                             else:
                                 st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-                                if c_del.button("SUPPRIMER LE SITE", type="secondary", use_container_width=True, key=f"btn_del_loc_{edit_l['id']}"):
+                                if st.button("SUPPRIMER LE SITE", type="secondary", use_container_width=True, key=f"btn_del_loc_{edit_l['id']}"):
                                     st.session_state[conf_key] = True
                                     st.rerun()
                                 st.markdown('</div>', unsafe_allow_html=True)

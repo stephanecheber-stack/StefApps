@@ -24,8 +24,10 @@ class User(Base):
     user_code = Column(String, unique=True, index=True) # A001 format
     first_name = Column(String)
     last_name = Column(String)
-    address = Column(String)
+    location_id = Column(Integer, ForeignKey('locations.id'), nullable=True)
+    
     groups = relationship("SupportGroup", secondary=user_group_link, backref="users")
+    location = relationship("Location", backref="users")
 
 class SupportGroup(Base):
     __tablename__ = "groups"

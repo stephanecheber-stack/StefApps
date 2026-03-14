@@ -5,7 +5,7 @@ import json
 import uuid
 import os
 import requests
-from engine import check_rules_integrity
+from engine import check_rules_integrity, load_workflows
 
 # --- CONSTANTES & CONFIGURATION ---
 DISPLAY_TO_TECH = {
@@ -213,8 +213,7 @@ def cb_load_step_for_edit(idx):
 def cb_delete_rule(idx, workflows_file, api_url):
     """Supprime définitivement une règle."""
     try:
-        with open(workflows_file, "r", encoding="utf-8") as f:
-            rules = yaml.safe_load(f) or []
+        rules = load_workflows()
         
         if 0 <= idx < len(rules):
             del_name = rules[idx].get('name')
@@ -228,6 +227,7 @@ def cb_delete_rule(idx, workflows_file, api_url):
             except: pass
             
             st.toast("🗑️ Règle supprimée.")
+            st.cache_data.clear() # Invalide le cache après modification disque
             if st.session_state.editing_rule_idx == idx: cb_start_new_rule()
             elif st.session_state.editing_rule_idx > idx: st.session_state.editing_rule_idx -= 1
             
@@ -256,6 +256,7 @@ def cb_save_global_rule(workflows_file, api_url, current_rules):
         yaml.dump(current_rules, f, default_flow_style=False, allow_unicode=True)
     
     st.toast("✅ Règle sauvegardée avec succès !", icon="💾")
+    st.cache_data.clear() # Invalide le cache après modification disque
     cb_start_new_rule()
 
 # -----------------------------------------------------------------------------
@@ -269,11 +270,8 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
     init_flow_state()
     st.session_state['support_groups'] = support_groups
     
-    # 1. Chargement des règles
-    current_rules = []
-    if os.path.exists(workflows_file):
-        with open(workflows_file, "r", encoding="utf-8") as f:
-            current_rules = yaml.safe_load(f) or []
+    # 1. Chargement des règles (CACHED)
+    current_rules = load_workflows()
 
     st.markdown(
         """

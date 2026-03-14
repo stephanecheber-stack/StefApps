@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 import yaml
 import os
+import streamlit as st
 from sqlalchemy.orm import Session
 from models import Task, AuditLog
 
@@ -28,6 +28,7 @@ def normalize_status(val):
         return "À faire"
     return val
 
+@st.cache_data(ttl=60)
 def load_workflows():
     if not os.path.exists(RULES_FILE):
         return []

@@ -70,7 +70,7 @@ class AuditLogCreate(BaseModel):
 class UserBase(BaseModel):
     first_name: str
     last_name: str
-    address: str
+    location_id: Optional[int] = None
 
 class UserCreate(UserBase):
     group_ids: List[int]
@@ -78,14 +78,8 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    address: Optional[str] = None
     group_ids: Optional[List[int]] = None
-
-class User(UserBase):
-    id: int
-    user_code: str
-    groups: List[SupportGroup] = []
-    class Config: from_attributes = True
+    location_id: Optional[int] = None
 
 class LocationBase(BaseModel):
     name: str
@@ -102,6 +96,23 @@ class LocationUpdate(BaseModel):
     zip_code: Optional[str] = None
     city: Optional[str] = None
 
+class LocationNested(LocationBase):
+    id: int
+    class Config: from_attributes = True
+
+class User(UserBase):
+    id: int
+    user_code: str
+    groups: List[SupportGroup] = []
+    location: Optional[LocationNested] = None
+    class Config: from_attributes = True
+
+class UserNested(UserBase):
+    id: int
+    user_code: str
+    class Config: from_attributes = True
+
 class Location(LocationBase):
     id: int
+    users: List[UserNested] = []
     class Config: from_attributes = True
