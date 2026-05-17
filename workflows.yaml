@@ -48,3 +48,26 @@
     operator: Est parmi
     value:
     - Haute
+- name: Escalade Vers Changement
+  steps:
+  - action: update
+    fields:
+      assigned_to: GRP_ITSM_CHANGE
+      classification_id: 3
+  - action: create_task
+    fields:
+      assigned_to: GRP_ITSM_CHANGE
+      classification_id: 3
+      description: Le Change Manager doit vérifier la création correcte du changement.
+      priority: Moyenne
+      status: Nouveau
+      title: Vérification par le Change Manager
+  triggers:
+  - field: Titre
+    operator: Contient
+    value: Change
+  - field: Assigné à
+    operator: Est parmi
+    value:
+    - GRP_ITSM
+    - GRP_SUPPORT_NATIF

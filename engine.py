@@ -90,7 +90,7 @@ def cascade_completion(task, db: Session):
             db.add(child)
             # Audit Log
             log = AuditLog(
-                message=f"[SYSTEME] Clôture automatique (Parent #{task.id} terminé)"
+                message=f"[ENGINE] Clôture automatique (Parent #{task.id} terminé)"
             )
             db.add(log)
             print(f"[ENGINE] -> Enfant #{child.id} clôturé.")
@@ -168,9 +168,9 @@ def process_workflow(task_id, db: Session):
         
         # --- 2. Exécution des Actions ---
         if all_met:
-            print(f"[ENGINE] [MATCH] pour '{rule['name']}' ! Exécution...")
+            print(f"[DEBUG] pour '{rule['name']}' ! Exécution...")
             # Log de match de règle
-            db.add(AuditLog(message=f"[WORKFLOW] Règle '{rule['name']}' appliquée"))
+            db.add(AuditLog(message=f"[ENGINE] Règle '{rule['name']}' appliquée"))
             changes_made = True
             
             steps = rule.get('steps') or rule.get('actions') or []
@@ -188,8 +188,8 @@ def process_workflow(task_id, db: Session):
                             val = normalize_status(val)
                             # Règle de Sécurité : Si le ticket est déjà 'Terminé', on ignore le changement de statut
                             if task.status == "Terminé" and val != "Terminé":
-                                print(f"[ENGINE] [SECURITÉ] Ignoré : Tentative de changer le statut 'Terminé' de #{task.id} via '{rule['name']}'")
-                                db.add(AuditLog(message=f"[SECURITÉ] Règle '{rule['name']}' ignorée : Impossible de modifier le statut d'un ticket déjà terminé."))
+                                print(f"[ENGINE] Ignoré : Tentative de changer le statut 'Terminé' de #{task.id} via '{rule['name']}'")
+                                db.add(AuditLog(message=f"[ENGINE] Règle '{rule['name']}' ignorée : Impossible de modifier le statut d'un ticket déjà terminé."))
                                 continue
                         
                         if hasattr(task, tech_key):
@@ -198,7 +198,7 @@ def process_workflow(task_id, db: Session):
                             changes_made = True
                             
                             # Audit Log for Update
-                            db.add(AuditLog(message=f"[WORKFLOW] Règle '{rule['name']}' : Mise à jour de {label}"))
+                            db.add(AuditLog(message=f"[ENGINE] Règle '{rule['name']}' : Mise à jour de {label}"))
                             
                             # Check for status completion
                             if tech_key == 'status' and val in ['Terminé', 'Done']:
@@ -221,10 +221,10 @@ def process_workflow(task_id, db: Session):
                             default_nat = db.query(TaskClassification).filter(TaskClassification.name == "Demandes").first()
                             if default_nat:
                                 target_classif_id = default_nat.id
-                                print(f"[ENGINE] [SÉCURITÉ] Nature manquante sur parent #{task.id}, repli sur 'Demandes' (ID: {target_classif_id})")
+                                print(f"[ENGINE] Nature manquante sur parent #{task.id}, repli sur 'Demandes' (ID: {target_classif_id})")
                         
                         if not target_classif_id:
-                            print(f"[ENGINE] [ERREUR CRITIQUE] Aucune nature disponible pour la création de sous-tâche pour #{task.id}")
+                            print(f"[ENGINE] Aucune nature disponible pour la création de sous-tâche pour #{task.id}")
                             continue
 
                         print(f"[ENGINE] Création sous-tâche (Parent #{task.id}) avec Nature ID : {target_classif_id}")
@@ -238,7 +238,7 @@ def process_workflow(task_id, db: Session):
                             classification_id=target_classif_id
                         )
                         db.add(new_task)
-                        db.add(AuditLog(message=f"[WORKFLOW] Sous-tâche créée pour le parent #{task_id} (Nature héritée)"))
+                        db.add(AuditLog(message=f"[ENGINE] Sous-tâche créée pour le parent #{task_id} (Nature héritée)"))
                         print(f"[ENGINE] CREATE sous-tâche '{new_task.title}' [OK]")
                         changes_made = True
                     except Exception as e:

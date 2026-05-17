@@ -6,7 +6,7 @@
 La promesse est simple : apporter la rigueur des processus ITIL sans la lourdeur administrative ni les coûts de licence prohibitifs.
 
 **Points clés de la valeur ajoutée :**
-*   **Souveraineté & Simplicité** : Déploiement On-Premise (contrôle total des données), architecture monolithique robuste (SQLite) facile à sauvegarder.
+*   **Simplicité & Performance** : Architecture robuste adossée à Supabase (PostgreSQL), offrant la sécurité du cloud et une gestion simplifiée des données.
 *   **Moteur de Workflow No-Code** : Permet aux équipes opérationnelles de définir leurs propres processus business (Règles, Triggers, Actions) sans écrire une ligne de code.
 *   **Maintenance Zéro** : Interface ultra-rapide (Streamlit), mises à jour simplifiées, pas de dépendances cloud complexes.
 
@@ -19,8 +19,8 @@ L'application repose sur une stack technologique éprouvée, choisie pour sa sta
 ### Stack Technologique
 *   **Frontend & Interface** : [Streamlit](https://streamlit.io/) (Python). Choisi pour sa rapidité de développement et son rendu "Data App" natif.
 *   **Backend API** : [FastAPI](https://fastapi.tiangolo.com/). Assure la logique métier, la validation des données et la performance via l'asynchronisme.
-*   **Base de Données** : [SQLite](https://www.sqlite.org/). Fichier unique (`liteflow.db`), garantissant la portabilité, la simplicité des backups et des performances suffisantes pour la cible PME (< 10k tickets/an).
-*   **ORM** : [SQLAlchemy](https://www.sqlalchemy.org/). Gestion propre et sécurisée des interactions BDD.
+*   **Base de Données** : [Supabase](https://supabase.com/) (PostgreSQL). Base de données relationnelle puissante offrant sécurité, authentification native et scalabilité pour répondre aux besoins grandissants des PME.
+*   **ORM** : [SQLAlchemy](https://www.sqlalchemy.org/). Gestion propre et sécurisée des interactions BDD avec PostgreSQL.
 
 ### Principes de Robustesse Implémentés
 1.  **Session State Management** : Utilisation intensive du `st.session_state` pour maintenir le contexte utilisateur (authentification, filtres, buffers d'édition) entre les rechargements de page.
@@ -37,11 +37,12 @@ Le modèle de données est conçu pour être extensible tout en restant lisible.
 
 Actuellement, l'authentification est simplifiée (Code Admin unique), mais le modèle prévoit l'extension vers une gestion fine des identités.
 
-| Table | Description | Champs Clés (Cible) | Implémenté |
+| Table | Description | Champs Clés | Implémenté |
 | :--- | :--- | :--- | :---: |
-| **Users** | Identités des acteurs (Techniciens, Requérants) | `id`, `username`, `email`, `role`, `sso_id` | ❌ (Global Admin) |
-| **SupportGroups** | Équipes de résolution (Support N1, Réseau...) | `id`, `name`, `email_alias` | ✅ (`name` unique) |
-| **Locations** | Sites physiques (Siège, Usine, Agence) | `id`, `name`, `address`, `country` | ❌ (Cible) |
+| **Users** | Identités des acteurs (Techniciens, Requérants) | `id`, `user_code`, `first_name`, `last_name`, `location_id` | ✅ |
+| **SupportGroups** | Équipes de résolution (Support N1, Réseau...) | `id`, `name` | ✅ |
+| **TaskClassifications** | Classification des tâches | `id`, `name` | ✅ |
+| **Locations** | Sites physiques (Siège, Usine, Agence) | `id`, `name`, `address`, `zip_code`, `city` | ✅ |
 | **Credentials** | Coffre-fort pour automatisations | `id`, `name`, `type` (SSH/API), `encrypted_val` | ❌ (Env Var) |
 
 ### 3.2 Tâches (Cœur du Système)
@@ -53,21 +54,23 @@ La table `Task` est centrale et polymorphe (Incident, Demande, Changement).
 *   `title`, `description` : Données textuelles.
 *   `status` : Enum (`Nouveau`, `À faire`, `En cours`, `Terminé`).
 *   `priority` : Niveau d'urgence (`Basse`, `Moyenne`, `Haute`, `Critique`).
-*   `assigned_to` : Lien vers le Groupe (String actuellement, FK vers `SupportGroup` en cible).
+*   `assigned_to` : Lien vers le Groupe.
+*   `tags` : Tags (String).
+*   **Relations** :
+    *   `classification_id` (FK) : Classification de la tâche.
+    *   `asset_id` (FK) : Équipement impacté.
 *   **Hiérarchie** :
     *   `parent_id` (FK) : Permet de lier une sous-tâche à une tâche mère.
     *   *Cascade Delete* : La suppression d'un parent entraîne celle des enfants (via `relationship(cascade="all, delete-orphan")`).
 
 ### 3.3 CMDB Allégée (Assets)
 
-*Architecture Cible pour la version "Pro"*
-Une table `Assets` liée aux Tâches pour tracer les équipements impactés.
+Une table `Assets` liée aux Tâches permet de tracer les équipements impactés.
 
-**Structure cible `assets` :**
-*   `id` (PK), `name` (Nom Hôte), `serial_number`.
-*   `status` (En service, En stock, Rebut).
-*   `location_id` (FK vers Locations).
-*   `assigned_user_id` (FK vers Users).
+**Structure `assets` :**
+*   `id` (PK), `name` (Nom Hôte), `asset_type`, `serial_number`.
+*   `status` (En stock, Utilisé, En réparation, Hors service).
+*   `assigned_user` (String).
 
 ---
 
@@ -114,9 +117,9 @@ L'UX est conçue pour la productivité ("High Information Density").
 *   **Auditabilité** :
     *   Table `AuditLog` : Trace les actions systèmes (règles déclenchées, suppressions).
     *   Traçabilité : Chaque modification automatique par le moteur est loggée ("Clôture automatique", "Règle X appliquée").
-*   **Souveraineté** :
-    *   Données stockées localement (fichier `.db`), pas de fuite vers le cloud.
-    *   Indépendance totale d'internet pour le fonctionnement interne.
+*   **Fiabilité et Sécurité Cloud** :
+    *   Données sécurisées via l'infrastructure Supabase (PostgreSQL).
+    *   Intégration de l'authentification Supabase native pour une protection optimale des accès.
 
 ---
 
@@ -124,6 +127,5 @@ L'UX est conçue pour la productivité ("High Information Density").
 
 Les prochaines étapes pour passer de la version "Lite" à "Pro" :
 
-1.  **Module Logistique (Assets)** : Création de la vue CMDB complète et lien avec les tickets (Champ "Asset Impacté").
-2.  **Portail Self-Service** : Interface simplifiée pour les utilisateurs finaux (Création de ticket simple, Suivi).
-3.  **Transition Cloud Optionnelle** : Conteneurisation (Docker) de l'application pour déploiement sur Azure/AWS si le client le souhaite, tout en gardant la base SQLite ou bascule vers PostgreSQL sans changer le code métier (grâce à SQLAlchemy).
+1.  **Portail Self-Service** : Interface simplifiée pour les utilisateurs finaux (Création de ticket simple, Suivi).
+2.  **Exploitation avancée de Supabase** : Utilisation des fonctionnalités temps réel (Realtime) et du Row Level Security (RLS) pour une gestion des droits encore plus granulaire au sein de PostgreSQL.

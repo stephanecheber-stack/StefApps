@@ -10,10 +10,52 @@ from flow_components import show_flow_designer
 from engine import normalize_status
 
 # --- CONFIGURATION & SÉCURITÉ ---
-load_dotenv()
+from pathlib import Path
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 WORKFLOWS_FILE = "workflows.yaml"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "IMPOSSIBLE_PASSWORD_SEQUENCE_XYZ")
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_DB_URL = os.getenv('SUPABASE_DB_URL', '')
+
+# Fallback intelligent
+if not SUPABASE_URL and "@db." in SUPABASE_DB_URL:
+    try:
+        project_id = SUPABASE_DB_URL.split("@db.")[1].split(".")[0]
+        SUPABASE_URL = f"https://{project_id}.supabase.co"
+    except: pass
+
+if not SUPABASE_URL:
+    st.error('🚨 Erreur critique : SUPABASE_URL est manquant dans le fichier .env.')
+    st.stop()
+    
+if not SUPABASE_KEY:
+    st.error('🚨 Erreur : La clé SUPABASE_KEY est manquante dans  .env. Allez dans Settings > API sur Supabase.')
+    st.stop()
+
+from supabase_auth import SyncGoTrueClient
+auth_url = f"{SUPABASE_URL.rstrip('/')}/auth/v1"
+auth_client = SyncGoTrueClient(url=auth_url, headers={"apiKey": SUPABASE_KEY})
+
+class APIClient:
+    def _get_kwargs(self, kwargs):
+        kwargs['timeout'] = kwargs.get('timeout', 10)
+        if st.session_state.get('token'):
+            headers = kwargs.get('headers', {})
+            headers['Authorization'] = f"Bearer {st.session_state.token}"
+            kwargs['headers'] = headers
+        return kwargs
+        
+    def get(self, url, **kwargs): import requests as _req; return _req.get(url, **self._get_kwargs(kwargs))
+    def post(self, url, **kwargs): import requests as _req; return _req.post(url, **self._get_kwargs(kwargs))
+    def put(self, url, **kwargs): import requests as _req; return _req.put(url, **self._get_kwargs(kwargs))
+    def delete(self, url, **kwargs): import requests as _req; return _req.delete(url, **self._get_kwargs(kwargs))
+
+requests = APIClient()
 
 # -----------------------------------------------------------------------------
 # LOGIQUE DE DONNÉES
@@ -28,15 +70,22 @@ def fetch_data(endpoint):
 
 def init_state():
     """Initialisation du moteur d'état."""
-    if "authenticated" not in st.session_state: st.session_state.authenticated = False
-    if "active_filter" not in st.session_state: st.session_state.active_filter = "Total"
-    if "grid_nonce" not in st.session_state: st.session_state.grid_nonce = 0
+    if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
+    if "token" not in st.session_state: st.session_state["token"] = None
+    if "user_email" not in st.session_state: st.session_state["user_email"] = None
+    if "active_filter" not in st.session_state: st.session_state["active_filter"] = "Total"
+    if "grid_nonce" not in st.session_state: st.session_state["grid_nonce"] = 0
     
+    if not st.session_state.get("token"): return
+
     # Données de fondation (Smart loading)
-    if "classifications" not in st.session_state: st.session_state["classifications"] = fetch_data("classifications")
-    if "support_groups" not in st.session_state: st.session_state["support_groups"] = fetch_data("groups")
-    if "locations" not in st.session_state: st.session_state["locations"] = fetch_data("locations")
-    if "non_assigne" not in st.session_state: st.session_state["non_assigne"] = {"id": None, "name": "Non assigné"}
+    try:
+        if "classifications" not in st.session_state: st.session_state["classifications"] = fetch_data("classifications")
+        if "support_groups" not in st.session_state: st.session_state["support_groups"] = fetch_data("groups")
+        if "locations" not in st.session_state: st.session_state["locations"] = fetch_data("locations")
+        if "non_assigne" not in st.session_state: st.session_state["non_assigne"] = {"id": None, "name": "Non assigné"}
+    except Exception as e:
+        print(f"[INIT] Erreur chargement de base : {e}")
 
     # Formulaires
     for f in ["create_title", "create_desc", "new_group_name", "new_nature_name", 
@@ -311,32 +360,74 @@ st.markdown("""
     div.red-btn button[data-testid="stBaseButton-secondary"]:hover {
         background-color: #b91c1c !important;
     }
+    
+    /* CHAMPS DE SAISIE */
+    div[data-baseweb="input"],
+    div[data-baseweb="textarea"],
+    div[data-baseweb="select"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 6px !important;
+    }
+    
+    div[data-baseweb="input"]:focus-within,
+    div[data-baseweb="textarea"]:focus-within,
+    div[data-baseweb="select"]:focus-within {
+        border-color: #3B82F6 !important;
+        box-shadow: 0 0 0 1px #3B82F6 !important;
+    }
+    
+    input, textarea, .stSelectbox, .stMultiSelect {
+        color: #1E293B !important;
+    }
+
+    /* TABLEAUX (Navy & Cloud style : tableau en blanc pur sur fond bleu clair) */
+    [data-testid="stDataFrame"] { background-color: #FFFFFF !important; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    [data-testid="stDataFrame"] > div, [data-testid="stDataFrame"] canvas { background-color: #FFFFFF !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='color:white;'>⚡ LiteFlow Pro</h1>", unsafe_allow_html=True)
-    if not st.session_state.authenticated:
-        pwd = st.text_input("Code Admin", type="password")
+    if getattr(st.session_state, 'token', None) is None:
+        st.markdown("### Connexion")
+        email = st.text_input("Email")
+        pwd = st.text_input("Mot de passe", type="password")
         if st.button("DÉVERROUILLER", type="secondary", width='stretch'):
-            if pwd == ADMIN_PASSWORD: st.session_state.authenticated = True; st.rerun()
+            try:
+                # Tentative de connexion via Supabase
+                response = auth_client.sign_in_with_password({"email": email, "password": pwd})
+                if response and response.session:
+                    st.session_state["token"] = response.session.access_token
+                st.session_state["authenticated"] = True
+                st.session_state["user_email"] = email
+                st.rerun()
+            except Exception as e:
+                print(f"[DEBUG AUTH] Erreur precise : {e}")
+                st.error(f"Erreur technique : {e}")
+        # Arrêter l'exécution ici si on n'est pas connecté pour ne montrer QUE le login
+        st.stop()
     else:
-        st.success("Admin Connecté")
-        if st.button("QUITTER", type="secondary", width='stretch'): st.session_state.authenticated = False; st.rerun()
+        st.success(f"Connecté : {st.session_state.get('user_email', 'Utilisateur')}")
+        if st.button("Se déconnecter", type="secondary", width='stretch'):
+            st.session_state["token"] = None
+            st.session_state["authenticated"] = False
+            st.session_state["user_email"] = None
+            st.rerun()
 
     st.divider()
     st.markdown('<p class="sidebar-header">CRÉATION</p>', unsafe_allow_html=True)
     st.text_input("Titre", key="create_title")
     st.text_area("Description", key="create_desc", height=100)
     
-    classifs = st.session_state["classifications"]
+    classifs = st.session_state.get("classifications", [])
     nature = st.selectbox("Nature", options=classifs, format_func=lambda x: x['name'], key="create_classif", on_change=cb_nature_changed)
     
     # Filtrage contextuel des groupes selon la nature
-    valid_groups = [g for g in st.session_state["support_groups"] if any(c['id'] == nature['id'] for c in g.get('classifications', []))] if nature else []
+    valid_groups = [g for g in st.session_state.get("support_groups", []) if any(c['id'] == nature['id'] for c in g.get('classifications', []))] if nature else []
     
-    st.selectbox("Assignation", options=[st.session_state["non_assigne"]] + valid_groups, format_func=lambda x: x['name'], key="create_assigned")
+    st.selectbox("Assignation", options=[st.session_state.get("non_assigne", {"id": None, "name": "Non assigné"})] + valid_groups, format_func=lambda x: x['name'], key="create_assigned")
     
     st.selectbox("Priorité", ["Basse", "Moyenne", "Haute", "Critique"], key="create_priority")
     st.button("OUVRIR LE TICKET", on_click=cb_create_task, type="secondary", width='stretch')
@@ -380,8 +471,8 @@ with tabs[0]:
                 df_v['status'] = df_v['status'].apply(normalize_status)
                 df_v['Nature'] = df_v['classification_name'].apply(lambda x: f"🛠️ {x}" if x == "Incidents" else f"📝 {x}")
                 df_v['Parent'] = df_v['parent_id'].apply(lambda x: int(x) if pd.notnull(x) else "")
-                df_v['Ouvert le'] = pd.to_datetime(df_v['created_at']).dt.strftime('%d/%m/%Y %H:%M')
-                df_v['Terminé le'] = pd.to_datetime(df_v['closed_at']).apply(lambda x: x.strftime('%d/%m/%Y %H:%M') if pd.notnull(x) else "")
+                df_v['Ouvert le'] = pd.to_datetime(df_v['created_at']).dt.strftime('%d/%m/%Y %H:%M') # type: ignore
+                df_v['Terminé le'] = pd.to_datetime(df_v['closed_at']).apply(lambda x: x.strftime('%d/%m/%Y %H:%M') if pd.notnull(x) else "") # type: ignore
 
                 # Liste des colonnes ordonnée
                 cols = ['id', 'Nature', 'Parent', 'Ouvert le', 'Terminé le', 'title', 'status', 'priority', 'assigned_to', 'description']
@@ -403,8 +494,8 @@ with tabs[0]:
                 )
 
                 # 5. Éditeur de Ticket
-                if sel and len(sel.selection.rows) > 0:
-                    t = f_tasks[list(sel.selection.rows)[0]]; tid = t['id']
+                if sel and len(sel.selection.rows) > 0: # type: ignore
+                    t = f_tasks[list(sel.selection.rows)[0]]; tid = t['id'] # type: ignore
                     st.markdown(f"### 🔎 Édition Ticket #{tid}")
                     with st.container(border=True):
                         c1, c2 = st.columns(2)
@@ -742,13 +833,26 @@ with tabs[2]:
 
             # 2. LISTE ET ÉDITION
             try:
-                locs = st.session_state.get("locations", [])
+                # Appeler l'API en direct sans cache
+                locs_resp = requests.get(f"{API_URL}/locations/")
+                if locs_resp.status_code == 200:
+                    locs = locs_resp.json()
+                else:
+                    locs = []
+                    st.error(f"Erreur API ({locs_resp.status_code}): {locs_resp.text}")
+                    
+                st.session_state["locations"] = locs
+                
                 if locs:
                     st.subheader("📋 Liste des Sites")
                     df_l = pd.DataFrame(locs)
                     st.dataframe(df_l[['name', 'address', 'zip_code', 'city']], 
-                                 column_config={"name": "Nom", "address": "Adresse", "zip_code": "CP", "city": "Ville"},
+                                 column_config={"name": "Nom", "address": "Adresse", "zip_code": "Code Postal", "city": "Ville"},
                                  width='stretch', hide_index=True)
+                else:
+                    st.info("Aucune localisation n'a été trouvée. Veuillez en créer une ci-dessus.")
+
+                if locs:
 
                     st.divider()
                     st.subheader("✏️ Édition d'une Localisation")

@@ -14,6 +14,7 @@ DISPLAY_TO_TECH = {
     'Statut': 'status',
     'Priorité': 'priority',
     'Assigné à': 'assigned_to',
+    'Nature': 'classification_id',
     'Tags': 'tags'
 }
 TECH_TO_DISPLAY = {v: k for k, v in DISPLAY_TO_TECH.items()}
@@ -53,7 +54,13 @@ def normalize_status(val):
 # --- CALLBACKS (LOGIQUE MÉTIER) ---
 
 def cb_clear_buffer():
-    """Réinitialise la zone de saisie d'étape."""
+    """Réinitialise la zone de saisie d'étape et nettoie les widgets orphelins."""
+    # Nettoyage explicite des widgets basés sur les IDs du buffer précédent
+    for row in st.session_state.get('buf_fields', []):
+        rid = row['id']
+        for k in [f"lbl_{rid}", f"val_{rid}"]:
+            if k in st.session_state: del st.session_state[k]
+
     st.session_state.buf_action = "update"
     st.session_state.buf_fields = []
     st.session_state.editing_step_idx = -1
@@ -90,9 +97,16 @@ def on_trigger_change(idx):
     trig = st.session_state.current_triggers[idx]
     new_field = trig['field'] # La valeur vient d'être mise à jour par le selectbox
 
-    if new_field in ["Statut", "Priorité"]:
-        trig['operator'] = "Est égal à"
-        trig['value'] = STATUS_OPTIONS[0] if new_field == "Statut" else PRIORITY_OPTIONS[1]
+    if new_field in ["Statut", "Priorité", "Assigné à"]:
+        trig['operator'] = "Est parmi"
+        if new_field == "Statut":
+            trig['value'] = [STATUS_OPTIONS[0]]
+        elif new_field == "Priorité":
+            trig['value'] = [PRIORITY_OPTIONS[1]]
+        else:
+            s_groups_raw = st.session_state.get('support_groups', [])
+            s_groups = [g['name'] if isinstance(g, dict) else g for g in s_groups_raw] if s_groups_raw else ["Non assigné"]
+            trig['value'] = [s_groups[0]] if s_groups else []
     else:
         trig['operator'] = "Contient"
         trig['value'] = ""
@@ -122,8 +136,8 @@ def on_action_label_change(row_id):
     # Retrouver la ligne dans le buffer
     for row in st.session_state.buf_fields:
         if row['id'] == row_id:
-            # Récupérer la nouvelle valeur depuis le widget
-            new_label = st.session_state.get(f"rule_step_lbl_{row_id}")
+            # Récupérer la nouvelle valeur depuis le widget (Correction: Utilise la clé courte sans préfixe rule_step_)
+            new_label = st.session_state.get(f"lbl_{row_id}")
             row['label'] = new_label
             
             # Reset smart de la valeur
@@ -133,30 +147,43 @@ def on_action_label_change(row_id):
                 row['value'] = PRIORITY_OPTIONS[1]
             elif new_label == "Assigné à":
                 # Utilise le premier groupe dispo (ex: "Non assigné")
-                s_groups = st.session_state.get('support_groups', ["Non assigné"])
+                s_groups_raw = st.session_state.get('support_groups', [])
+                s_groups = [g['name'] if isinstance(g, dict) else g for g in s_groups_raw] if s_groups_raw else ["Non assigné"]
                 row['value'] = s_groups[0] if s_groups else ""
+            elif new_label == "Nature":
+                s_classifs = st.session_state.get('classifications', [])
+                row['value'] = s_classifs[0]['name'] if (s_classifs and isinstance(s_classifs[0], dict)) else "Incidents"
             else:
                 row['value'] = ""
             
             # Update le widget value pour reflet immédiat
-            st.session_state[f"rule_step_val_{row_id}"] = row['value']
+            st.session_state[f"val_{row_id}"] = row['value']
             break
 
 def cb_submit_step():
     """Valide et enregistre l'étape du buffer vers la liste temporaire."""
     final_fields = {}
     
-    # Récupération des valeurs depuis les widgets via session_state
+    # Récupération des valeurs depuis les widgets via session_state (Correction: Utilise les clés courtes)
     for row in st.session_state.buf_fields:
         rid = row['id']
-        label = st.session_state.get(f"rule_step_lbl_{rid}", row['label'])
-        val = st.session_state.get(f"rule_step_val_{rid}", row['value'])
+        label = st.session_state.get(f"lbl_{rid}", row['label'])
+        val = st.session_state.get(f"val_{rid}", row['value'])
         
         tech_key = DISPLAY_TO_TECH.get(label, label)
         
         # Normalisation finale
         if label == "Statut": val = normalize_status(val)
         
+        # Sécurité : Forçage du type chaîne pour l'assignation (Évite le None suite à une erreur UI)
+        if label == "Assigné à" and not val:
+            val = "Non assigné"
+        elif label == "Nature":
+            s_classifs = st.session_state.get('classifications', [])
+            # Trouve l'ID par le nom (Stockage technique ID)
+            match = next((c for c in s_classifs if isinstance(c, dict) and c.get('name') == val), None)
+            if match: val = match.get('id', val)
+            
         final_fields[tech_key] = val
 
     if not final_fields and st.session_state.buf_action == 'create_task':
@@ -268,7 +295,9 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
         support_groups = ["Non assigné"]
     
     init_flow_state()
-    st.session_state['support_groups'] = support_groups
+    # Nettoyage des noms de groupes pour la consistance UI (Éviter les dictionnaires {"id":X, "name":Y})
+    clean_groups = [g['name'] if isinstance(g, dict) else g for g in support_groups] if support_groups else ["Non assigné"]
+    st.session_state['support_groups'] = support_groups # On garde l'original au cas où
     
     # 1. Chargement des règles (CACHED)
     current_rules = load_workflows()
@@ -368,38 +397,25 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
         # Définition des options d'opérateurs par défaut
         ops = ["Contient", "Ne contient pas", "Est égal à", "Commence par"]
 
-        if new_field == "Statut":
-             trig['operator'] = "Est parmi" # Force l'opérateur
-             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"rule_trig_o_{i}")
-             
-             # Conversion valeur actuelle en liste si nécessaire
-             current_val = trig['value']
-             if not isinstance(current_val, list):
-                 current_val = [current_val] if current_val and current_val in STATUS_OPTIONS else []
-                 
-             trig['value'] = c3.multiselect("Valeur", STATUS_OPTIONS, default=current_val, key=f"rule_trig_v_{i}")
-
-        elif new_field == "Priorité":
-             trig['operator'] = "Est parmi" # Force l'opérateur
-             c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"rule_trig_o_{i}")
-             
-             # Conversion valeur actuelle en liste si nécessaire
-             current_val = trig['value']
-             if not isinstance(current_val, list):
-                 current_val = [current_val] if current_val and current_val in PRIORITY_OPTIONS else []
-
-             trig['value'] = c3.multiselect("Valeur", PRIORITY_OPTIONS, default=current_val, key=f"rule_trig_v_{i}")
-
-        elif new_field == "Assigné à":
-            trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"rule_trig_o_{i}")
-            if trig['operator'] == "Est égal à":
-                # Mode strict avec Selectbox
-                try: idx_v = support_groups.index(trig['value'])
-                except: idx_v = 0
-                trig['value'] = c3.selectbox("Valeur", support_groups, index=idx_v, key=f"rule_trig_v_{i}")
+        if new_field in ["Statut", "Priorité", "Assigné à"]:
+            trig['operator'] = "Est parmi" # Force l'opérateur
+            c2.text_input("Opérateur", value="Est parmi", disabled=True, key=f"rule_trig_o_{i}")
+            
+            # Détermination des options et conversion valeur actuelle
+            if new_field == "Statut":
+                options = STATUS_OPTIONS
+            elif new_field == "Priorité":
+                options = PRIORITY_OPTIONS
             else:
-                # Mode libre (pour 'Contient', 'Commence par'...)
-                trig['value'] = c3.text_input("Valeur", value=trig['value'], key=f"rule_trig_v_{i}")
+                options = clean_groups
+
+            current_val = trig['value']
+            if not isinstance(current_val, list):
+                # Migration auto vers liste
+                current_val = [current_val] if current_val and current_val in options else []
+                
+            trig['value'] = c3.multiselect("Valeurs", options, default=current_val, key=f"rule_trig_v_{i}")
+
         else:
             # Cas général (Titre, Description...)
             trig['operator'] = c2.selectbox("Opérateur", ops, index=0 if trig['operator'] not in ops else ops.index(trig['operator']), key=f"rule_trig_o_{i}")
@@ -477,9 +493,15 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
                 except: idx_v = 1
                 c2.selectbox("Valeur", PRIORITY_OPTIONS, index=idx_v, key=val_key)
             elif new_lbl == "Assigné à":
-                try: idx_v = support_groups.index(current_val)
+                try: idx_v = clean_groups.index(current_val)
                 except: idx_v = 0
-                c2.selectbox("Valeur", support_groups, index=idx_v, key=val_key)
+                c2.selectbox("Valeur", clean_groups, index=idx_v, key=val_key)
+            elif new_lbl == "Nature":
+                s_classifs = st.session_state.get('classifications', [])
+                classif_names = [c['name'] for c in s_classifs if isinstance(c, dict)] if s_classifs else ["Incidents"]
+                try: idx_v = classif_names.index(current_val)
+                except: idx_v = 0
+                c2.selectbox("Valeur", classif_names, index=idx_v, key=val_key)
             else:
                 c2.text_input("Valeur", value=current_val, key=val_key)
             
@@ -502,10 +524,21 @@ def show_flow_designer(api_url, workflows_file, support_groups=None):
         for idx, step in enumerate(st.session_state.temp_steps):
             act = step['action'].upper()
             
-            # Formattage visuel des champs modifiés
             fields_html = []
             for k, v in step['fields'].items():
-                fields_html.append(f"<span style='background:#f1f5f9; padding:2px 8px; border-radius:12px; font-size:12px; color:#475569; font-weight:600;'>{k}: <span style='color:#5048e5;'>{v}</span></span>")
+                label = TECH_TO_DISPLAY.get(k, k)
+                display_val = v if v is not None else "Non renseigné"
+
+                # Pour Nature (ID), on essaye de réafficher le nom
+                if k == "classification_id":
+                    s_classifs = st.session_state.get('classifications', [])
+                    match = next((c for c in s_classifs if isinstance(c, dict) and str(c.get('id')) == str(v)), None)
+                    if match: display_val = match.get('name', v)
+
+                if isinstance(display_val, (list, dict)): 
+                    display_val = json.dumps(display_val, ensure_ascii=False)
+                
+                fields_html.append(f"<span style='background:#f1f5f9; padding:2px 8px; border-radius:12px; font-size:12px; color:#475569; font-weight:600;'>{label}: <span style='color:#5048e5;'>{display_val}</span></span>")
             desc_html = " ".join(fields_html)
             
             icon = "🛠️" if act == "UPDATE" else "✨"

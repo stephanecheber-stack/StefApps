@@ -4,6 +4,9 @@ from sqlalchemy.orm import relationship, backref
 from database import Base
 import datetime
 
+def get_utc_now():
+    return datetime.datetime.now(datetime.timezone.utc)
+
 group_classification_link = Table(
     "group_classification_link",
     Base.metadata,
@@ -61,7 +64,7 @@ class Task(Base):
     parent_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=True)
     classification_id = Column(Integer, ForeignKey("classifications.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
     closed_at = Column(DateTime, nullable=True)
     
     children = relationship("Task", cascade="all, delete-orphan", backref=backref('parent', remote_side=[id]))
@@ -72,7 +75,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(Integer, primary_key=True, index=True)
     message = Column(String)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=get_utc_now)
 
 class Location(Base):
     __tablename__ = "locations"

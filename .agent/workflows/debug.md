@@ -41,3 +41,12 @@ description: Audit_Integrite_LiteFlow
 
 [CONSIGNE DÉBUTANT]
 Toujours expliquer les corrections effectuées de manière pédagogique pour aider l'utilisateur à apprendre la structure de son application.
+
+[PHASE 5 : EXÉCUTION DES TESTS AUTOMATIQUES]
+- Lancer la commande : `.\.venv\Scripts\python.exe -m pytest test_suite.py`
+- Si un test échoue [FAIL] :
+    - Analyser la Traceback.
+    - Identifier si c'est une régression UI ou une erreur API.
+    - Proposer une correction immédiate AVANT de valider le workflow.
+- Si tous les tests passent [PASS] :
+    - Confirmer la stabilité de la version.

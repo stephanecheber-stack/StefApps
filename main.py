@@ -8,9 +8,53 @@ import schemas
 from database import SessionLocal, engine
 import os
 from engine import process_workflow
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from postgrest import SyncPostgrestClient
+from supabase_auth import SyncGoTrueClient
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
+SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "")
+
+# Fallback intelligent
+if not SUPABASE_URL and "@db." in SUPABASE_DB_URL:
+    try:
+        project_id = SUPABASE_DB_URL.split("@db.")[1].split(".")[0]
+        SUPABASE_URL = f"https://{project_id}.supabase.co"
+    except: pass
+
+print(f"[DEBUG BACKEND] URL chargée: {SUPABASE_URL}")
+
+if not SUPABASE_KEY:
+    print("[CRITICAL] SUPABASE_KEY manquante dans le .env !")
+
+auth_client = SyncGoTrueClient(
+    url=f"{SUPABASE_URL}/auth/v1", 
+    headers={"apiKey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+) if SUPABASE_URL and SUPABASE_KEY else None
+
+db_client = SyncPostgrestClient(
+    f"{SUPABASE_URL}/rest/v1", 
+    headers={"apiKey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+) if SUPABASE_URL and SUPABASE_KEY else None
+
+security = HTTPBearer()
+
+def get_user_from_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token: str = credentials.credentials
+    if not auth_client:
+        raise HTTPException(status_code=500, detail="Supabase client not configured")
+    try:
+        user_response = auth_client.get_user(token)
+        if not user_response or not getattr(user_response, "user", None):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return getattr(user_response, "user", None)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # Création des tables au démarrage
 models.Base.metadata.create_all(bind=engine)
+print("[SGBD] Connexion à Supabase établie et schéma synchronisé")
 
 # Initialisation des classifications par défaut
 def init_data():
@@ -25,7 +69,10 @@ def init_data():
 
 init_data()
 
-app = FastAPI(title="LiteFlow Pro API")
+app = FastAPI(
+    title="LiteFlow Pro API",
+    dependencies=[Depends(get_user_from_token)]
+)
 
 # Dépendance DB
 def get_db():

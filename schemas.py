@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -15,7 +15,7 @@ class AssetCreate(AssetBase):
 
 class Asset(AssetBase):
     id: int
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskBase(BaseModel):
     title: str
@@ -39,7 +39,7 @@ class TaskUpdate(TaskBase):
 class Task(TaskBase):
     id: int
     classification_name: Optional[str] = None
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ClassificationCreate(BaseModel):
     name: str
@@ -49,7 +49,7 @@ class ClassificationUpdate(BaseModel):
 
 class Classification(ClassificationCreate):
     id: int
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class GroupCreate(BaseModel):
     name: str
@@ -63,7 +63,7 @@ class SupportGroup(BaseModel):
     id: int
     name: str
     classifications: List[Classification] = []
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AuditLogCreate(BaseModel):
     message: str
@@ -98,21 +98,21 @@ class LocationUpdate(BaseModel):
 
 class LocationNested(LocationBase):
     id: int
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class User(UserBase):
     id: int
     user_code: str
     groups: List[SupportGroup] = []
     location: Optional[LocationNested] = None
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserNested(UserBase):
     id: int
     user_code: str
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class Location(LocationBase):
     id: int
     users: List[UserNested] = []
-    class Config: from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
